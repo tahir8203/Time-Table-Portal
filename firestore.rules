@@ -13,6 +13,15 @@ service cloud.firestore {
       allow update: if ownsLibrary(userId)
                     && resource.data.ownerUid == userId
                     && request.resource.data.ownerUid == userId;
+
+      match /versions/{versionId} {
+        allow read: if ownsLibrary(userId);
+        allow create: if ownsLibrary(userId)
+                      && request.resource.data.ownerUid == userId;
+        allow delete: if ownsLibrary(userId)
+                      && resource.data.ownerUid == userId;
+        allow update: if false;
+      }
     }
 
     match /{document=**} {
