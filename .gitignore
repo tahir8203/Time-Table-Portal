@@ -6,3 +6,6 @@ dist/
 npm-debug.log*
 firebase-debug.log*
 !.env.example
+
+.vercel
+.env*
