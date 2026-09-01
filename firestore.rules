@@ -1,0 +1,22 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function ownsLibrary(userId) {
+      return request.auth != null && request.auth.uid == userId;
+    }
+
+    match /users/{userId}/timetables/{timetableId} {
+      allow read, delete: if ownsLibrary(userId);
+      allow create: if ownsLibrary(userId)
+                    && request.resource.data.ownerUid == userId;
+      allow update: if ownsLibrary(userId)
+                    && resource.data.ownerUid == userId
+                    && request.resource.data.ownerUid == userId;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
