@@ -138,15 +138,16 @@ function localBrowserPath() {
 async function launchBrowser() {
   const local = process.platform === "win32" ? localBrowserPath() : null;
   const executablePath = local || await chromiumBinary.executablePath();
-  const userDataDir = local ? null : path.join(os.tmpdir(), `pw-${randomUUID()}`);
+  const persistent = !local || process.env.PDF_PERSISTENT_CONTEXT_TEST === "1";
+  const userDataDir = persistent ? path.join(os.tmpdir(), `pw-${randomUUID()}`) : null;
+  const args = local ? ["--no-sandbox", "--disable-dev-shm-usage"] : chromiumBinary.args;
   try {
-    const browser = await playwright.launch({
-      executablePath,
-      headless: true,
-      args: local
-        ? ["--no-sandbox", "--disable-dev-shm-usage"]
-        : [...chromiumBinary.args, `--user-data-dir=${userDataDir}`],
-    });
+    const browser = persistent
+      ? await playwright.launchPersistentContext(userDataDir, { executablePath, headless: true, args })
+      : await playwright.launch({ executablePath, headless: true, args });
+    if (persistent) {
+      for (const page of browser.pages()) await page.close();
+    }
     return { browser, userDataDir };
   } catch (error) {
     if (userDataDir) await rm(userDataDir, { recursive: true, force: true });
