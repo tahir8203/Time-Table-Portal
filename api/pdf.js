@@ -5,7 +5,6 @@ import { randomUUID } from "node:crypto";
 import { rm } from "node:fs/promises";
 import chromiumBinary from "@sparticuz/chromium";
 import { chromium as playwright } from "playwright-core";
-import sanitizeHtml from "sanitize-html";
 import { PDFDocument } from "pdf-lib";
 
 export const config = { maxDuration: 300 };
@@ -118,16 +117,7 @@ function cleanFragment(html) {
   if (/url\s*\(|expression\s*\(|javascript\s*:|@import|<\s*(script|iframe|img|link|object|embed)/i.test(html)) {
     throw new Error("The printable document contains unsupported content.");
   }
-  return sanitizeHtml(html, {
-    allowedTags: ["div", "table", "colgroup", "col", "thead", "tbody", "tr", "th", "td", "span", "br", "b", "strong", "em", "i"],
-    allowedAttributes: {
-      "*": ["class"],
-      td: ["class", "rowspan", "colspan"],
-      th: ["class", "rowspan", "colspan"],
-      col: ["class", "span"],
-    },
-    disallowedTagsMode: "discard",
-  });
+  return html;
 }
 
 function documentHtml(sheetHtml) {
@@ -182,7 +172,30 @@ async function extractSheets(browser, html) {
   const page = await browser.newPage({ viewport: { width: 1400, height: 1000 } });
   try {
     await page.route("**/*", (route) => route.abort());
-    await page.setContent(`<main id="source">${html}</main>`, { waitUntil: "domcontentloaded" });
+    await page.setContent('<main id="source"></main>', { waitUntil: "domcontentloaded" });
+    await page.locator("#source").evaluate((source, rawHtml) => {
+      const parsed = new DOMParser().parseFromString(rawHtml, "text/html");
+      const allowedTags = new Set(["DIV", "TABLE", "COLGROUP", "COL", "THEAD", "TBODY", "TR", "TH", "TD", "SPAN", "BR", "B", "STRONG", "EM", "I"]);
+      const spanTags = new Set(["TD", "TH", "COL"]);
+      const cloneSafe = (node) => {
+        if (node.nodeType === Node.TEXT_NODE) return document.createTextNode(node.nodeValue || "");
+        if (node.nodeType !== Node.ELEMENT_NODE) return document.createDocumentFragment();
+        const container = allowedTags.has(node.tagName) ? document.createElement(node.tagName.toLowerCase()) : document.createDocumentFragment();
+        if (container.nodeType === Node.ELEMENT_NODE) {
+          if (node.hasAttribute("class")) container.setAttribute("class", node.getAttribute("class"));
+          if (spanTags.has(node.tagName)) {
+            for (const name of ["rowspan", "colspan", "span"]) {
+              if (!node.hasAttribute(name)) continue;
+              const value = Number.parseInt(node.getAttribute(name), 10);
+              if (Number.isInteger(value) && value >= 1 && value <= 80) container.setAttribute(name, String(value));
+            }
+          }
+        }
+        for (const child of node.childNodes) container.appendChild(cloneSafe(child));
+        return container;
+      };
+      for (const child of parsed.body.childNodes) source.appendChild(cloneSafe(child));
+    }, html);
     const sheets = await page.locator("#source > .psheet").evaluateAll((nodes) => nodes.map((node) => {
       const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
       while (walker.nextNode()) {
