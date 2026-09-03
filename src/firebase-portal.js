@@ -450,6 +450,10 @@ function forceCloudView() {
 window.CloudPortal = {
   mount(node) { mountNode = node; render(); },
   requiresSignIn() { return configured && !user; },
+  async getIdToken() {
+    if (!auth?.currentUser) throw new Error("Please sign in before generating a PDF.");
+    return auth.currentUser.getIdToken();
+  },
 };
 
 setInterval(() => {

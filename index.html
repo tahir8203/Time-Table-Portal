@@ -1470,33 +1470,33 @@ function showCv(r){
 function pCoverDay(){
   var iso=CDATE, away=leaveOf(iso), needs=coverNeeds(iso), day=coverOf(iso);
   var h='<div class="psheet pp"><div class="psub">ALTERNATIVE PERIOD ORDER</div>'+
-    '<div class="pbig" style="font-size:20px">'+esc(dayName(iso))+', '+esc(niceDate(iso))+'</div>'+
+    '<div class="pbig cover-title">'+esc(dayName(iso))+', '+esc(niceDate(iso))+'</div>'+
     '<div class="pinfo">'+esc(S.meta.school)+'   |   Headmaster '+esc(S.meta.head)+'</div>';
-  h+='<div class="pinfo" style="margin-top:4px">'+
+  h+='<div class="pinfo top-gap">'+
      'On leave today: '+(away.length? away.map(tname).map(esc).join(',   ') : 'nobody')+'</div>';
   if(!needs.length){
-    h+='<div class="psum" style="margin-top:10px">No periods need cover on this day.</div></div>';
+    h+='<div class="psum">No periods need cover on this day.</div></div>';
     return h;
   }
-  h+='<table class="pcard" style="margin-top:8px"><thead><tr><th>Period</th><th>Time</th><th>Class</th>'+
+  h+='<table class="pcard cover-table"><thead><tr><th>Period</th><th>Time</th><th>Class</th>'+
      '<th>Subject</th><th>Teacher on leave</th><th>Alternative teacher</th><th>Signature</th></tr></thead><tbody>';
   needs.forEach(function(n){
     var cv=day[n.c+'|'+n.p];
     h+='<tr><td class="p">P'+n.p+'</td>'+
-       '<td style="font-size:10px">'+esc(isFriday(iso)?(S.timing.periods[n.p-1].fri||'—'):S.timing.periods[n.p-1].mt)+'</td>'+
-       '<td class="mainv" style="font-size:13px">'+esc(cname(n.c))+'</td>'+
-       '<td style="font-size:11px">'+esc(sname(n.s))+'</td>'+
-       '<td style="font-size:11px;font-weight:900">'+esc(tname(n.absent))+'</td>'+
-       '<td class="mainv" style="font-size:13px">'+(cv?esc(tname(cv)):'<span style="font-weight:800">not covered</span>')+'</td>'+
-       '<td style="width:80px"></td></tr>';
+       '<td class="cover-time">'+esc(isFriday(iso)?(S.timing.periods[n.p-1].fri||'—'):S.timing.periods[n.p-1].mt)+'</td>'+
+       '<td class="mainv cover-class">'+esc(cname(n.c))+'</td>'+
+       '<td class="cover-subject">'+esc(sname(n.s))+'</td>'+
+       '<td class="cover-absent">'+esc(tname(n.absent))+'</td>'+
+       '<td class="mainv cover-teacher">'+(cv?esc(tname(cv)):'<span class="not-covered">not covered</span>')+'</td>'+
+       '<td class="sign-space"></td></tr>';
   });
   h+='</tbody></table>';
   var td={}; Object.keys(day).forEach(function(k){ if(day[k]) td[day[k]]=(td[day[k]]||0)+1; });
   var run=coverCounts('month',iso);
-  h+='<div class="psum" style="margin-top:8px;font-size:11px">Extra periods today &mdash; '+
+  h+='<div class="psum cover-summary">Extra periods today &mdash; '+
      (Object.keys(td).length? Object.keys(td).sort(function(a,b){ return tname(a)<tname(b)?-1:1; })
        .map(function(t){ return esc(tname(t))+' +'+td[t]; }).join(' &nbsp;&middot;&nbsp; ') : 'none')+'</div>';
-  h+='<div style="margin-top:22px;display:flex;justify-content:space-between;font-size:11px">'+
+  h+='<div class="psign split-signatures">'+
      '<div>Teachers informed by: ____________________</div>'+
      '<div>Headmaster: ____________________</div></div>';
   h+='<div class="pfoot">Alternative periods are shared out so that no teacher carries more than their turn.</div></div>';
@@ -1510,9 +1510,9 @@ function pCoverMonth(){
   var tot=vals.reduce(function(a,b){ return a+b; },0);
   var spread=vals.length?Math.max.apply(null,vals)-Math.min.apply(null,vals):0;
   var h='<div class="psheet pp"><div class="psub">ALTERNATIVE PERIOD STATEMENT</div>'+
-    '<div class="pbig" style="font-size:22px">'+esc(niceMonth(ym))+'</div>'+
+    '<div class="pbig cover-title">'+esc(niceMonth(ym))+'</div>'+
     '<div class="pinfo">'+esc(S.meta.school)+'   |   Headmaster '+esc(S.meta.head)+'</div>'+
-    '<table class="pt" style="margin-top:8px"><thead><tr><th>Teacher</th><th>Designation</th>'+
+    '<table class="pt cover-table"><thead><tr><th>Teacher</th><th>Designation</th>'+
     '<th>Alternative periods<br>this month</th><th>All time</th><th>Days on leave</th><th>Dates covered</th>'+
     '</tr></thead><tbody>';
   S.teachers.slice().sort(function(a,b){ return (run[b.id]||0)-(run[a.id]||0) || (a.name<b.name?-1:1); })
@@ -1521,15 +1521,15 @@ function pCoverMonth(){
       return Object.keys(day).some(function(k){ return day[k]===t.id; }); })
       .map(function(d){ return d.slice(8)+'/'+d.slice(5,7); });
     var lv=Object.keys(S.leave||{}).filter(function(d){ return d.slice(0,7)===ym && leaveOf(d).indexOf(t.id)>=0; }).length;
-    h+='<tr><td class="k" style="text-align:left">'+esc(t.name)+'</td><td>'+esc(t.desig)+'</td>'+
-       '<td style="font-weight:700">'+(run[t.id]||0)+'</td><td>'+(all[t.id]||0)+'</td><td>'+lv+'</td>'+
-       '<td style="font-size:8px">'+(ds.join(', ')||'—')+'</td></tr>';
+    h+='<tr><td class="k left-text">'+esc(t.name)+'</td><td>'+esc(t.desig)+'</td>'+
+       '<td class="number-value">'+(run[t.id]||0)+'</td><td>'+(all[t.id]||0)+'</td><td>'+lv+'</td>'+
+       '<td class="date-list">'+(ds.join(', ')||'—')+'</td></tr>';
   });
   h+='</tbody></table>';
-  h+='<div class="psum" style="margin-top:8px">Total alternative periods: '+tot+
+  h+='<div class="psum">Total alternative periods: '+tot+
      '     |     Days with absence: '+absDays+'     |     Fairness gap: '+spread+
      (spread<=1?' (well shared)':spread<=2?' (acceptable)':' (needs balancing)')+'</div>';
-  h+='<div style="margin-top:22px;text-align:right;font-size:11px">Headmaster: ____________________</div>'+
+  h+='<div class="psign right-signature">Headmaster: ____________________</div>'+
      '<div class="pfoot">Fairness gap is the difference between the highest and lowest number of alternative periods taken this month.</div></div>';
   return h;
 }
@@ -1591,16 +1591,16 @@ var PMODES=[
 ];
 function vPrint(){
   var h='<div class="phead"><div><h1>Print and export</h1>'+
-    '<div class="note">Choose what to print, then use your browser\u2019s print dialog. Every sheet uses bold, high-contrast black-and-white formatting. Pick "Save as PDF" there to get a file.</div></div></div>';
-  h+='<div class="card"><h2>Print</h2><div class="tw"><table><tbody>';
+    '<div class="note">Download press-ready A4 PDFs directly. Every sheet is automatically enlarged to fill one page, checked for clipped cells and rendered in bold black and white without browser headers, URLs or page numbers.</div></div></div>';
+  h+='<div class="card"><h2>A4 PDF files</h2><div class="tw"><table><tbody>';
   PMODES.forEach(function(m){
     h+='<tr><td><b>'+m[1]+'</b><div class="small muted">'+m[2]+'</div></td>'+
-       '<td style="width:150px"><button class="btn pri" data-pm="'+m[0]+'">Print</button> '+
+       '<td style="width:210px"><button class="btn pri" data-pm="'+m[0]+'">Download A4 PDF</button> '+
        '<button class="btn" data-pv="'+m[0]+'">Preview</button></td></tr>';
   });
   h+='</tbody></table></div><div class="body small muted">'+
-     'Print from Chrome or Edge for the tidiest result — portrait and landscape pages then come out correctly in one job. '+
-     'Turn off headers and footers in the print dialog.</div></div>';
+     'Gate and individual sheets use A4 portrait. Class-wise and teacher-wise master timetables use A4 landscape. '+
+     'Multi-sheet files keep exactly one timetable sheet on each PDF page.</div></div>';
   h+='<div class="card"><h2>Export</h2><div class="body rowflex">'+
      '<button class="btn" id="exClass">Class timetable (CSV)</button>'+
      '<button class="btn" id="exTeach">Teacher timetable (CSV)</button>'+
@@ -1621,9 +1621,37 @@ function bindPrint(){
   $('exList').onclick=exportListCsv;
   $('exCover').onclick=exportCoverCsv;
 }
-function doPrint(mode){
-  $('printRoot').innerHTML=buildPrint(mode);
-  window.print();
+var PDF_NAMES={gate:'gate-time-division.pdf',cmaster:'class-wise-all-classes.pdf',tmaster:'teacher-wise-all-teachers.pdf',
+  ccards:'class-timetables.pdf',tcards:'teacher-timetables.pdf',all:'complete-timetable-book.pdf',
+  coverday:'alternative-period-order.pdf',covermonth:'alternative-period-statement.pdf'};
+async function doPrint(mode){
+  var buttons=[].slice.call(document.querySelectorAll('[data-pm]'));
+  buttons.forEach(function(button){ button.disabled=true; });
+  var active=document.querySelector('[data-pm="'+mode+'"]'), old=active&&active.textContent;
+  if(active) active.textContent='Building PDF…';
+  try{
+    if(!window.CloudPortal||!window.CloudPortal.getIdToken) throw new Error('Please sign in before generating a PDF.');
+    var token=await window.CloudPortal.getIdToken();
+    var response=await fetch('/api/pdf',{method:'POST',headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'},
+      body:JSON.stringify({mode:mode,html:buildPrint(mode)})});
+    if(!response.ok){
+      var problem=await response.json().catch(function(){return {};});
+      throw new Error(problem.error||'The PDF service could not build this file.');
+    }
+    var blob=await response.blob(), url=URL.createObjectURL(blob), link=document.createElement('a');
+    link.href=url; link.download=PDF_NAMES[mode]||'timetable.pdf'; document.body.appendChild(link); link.click();
+    setTimeout(function(){document.body.removeChild(link);URL.revokeObjectURL(url);},800);
+    console.info('Verified timetable PDF',{mode:mode,pages:response.headers.get('X-PDF-Pages'),
+      minimumHeightFill:response.headers.get('X-PDF-Min-Height-Fill'),minimumFontPt:response.headers.get('X-PDF-Min-Font-PT')});
+    toast('Verified A4 PDF downloaded');
+  }catch(error){
+    console.error(error);
+    openDlg('PDF generation problem','<div class="banner bad" style="margin:0">'+esc(error.message||'PDF generation failed.')+'</div>',
+      '<button class="btn pri" onclick="closeDlg()">Close</button>');
+  }finally{
+    buttons.forEach(function(button){ button.disabled=false; });
+    if(active) active.textContent=old;
+  }
 }
 function hdr(title,sub){
   return '<div class="ptitle">'+esc(title)+'</div><div class="psub">'+esc(sub)+'</div>';
@@ -1634,15 +1662,15 @@ function pGate(){
   var t=S.timing;
   var h='<div class="psheet pp">'+hdr('TIME DIVISION', metaLine())+
     '<table class="pt"><thead><tr><th>Period</th><th>Monday to Thursday</th><th>Friday</th></tr></thead><tbody>';
-  h+='<tr><td class="k">'+esc(t.assembly.label)+'</td><td style="font-weight:900">'+
-     esc(t.assembly.mt)+'</td><td style="font-weight:900">'+esc(t.assembly.fri||'—')+'</td></tr>';
+  h+='<tr class="asm"><td class="k">'+esc(t.assembly.label)+'</td><td>'+
+     esc(t.assembly.mt)+'</td><td>'+esc(t.assembly.fri||'—')+'</td></tr>';
   for(var p=1;p<=NP();p++){
     var pr=t.periods[p-1];
     h+='<tr><td class="k">'+p+'</td><td>'+esc(pr.mt||'—')+'</td>'+
        (pr.fri?'<td>'+esc(pr.fri)+'</td>':'<td class="void">no period on Friday</td>')+'</tr>';
-    if(t.breakAfter===p) h+='<tr><td class="k" style="border-top:2px solid #000;border-bottom:2px solid #000">BREAK</td>'+ 
-      '<td style="font-weight:900;border-top:2px solid #000;border-bottom:2px solid #000">'+esc(t.brk.mt||'—')+'</td>'+ 
-      (t.brk.fri?'<td style="font-weight:900;border-top:2px solid #000;border-bottom:2px solid #000">'+esc(t.brk.fri)+'</td>':'<td class="void">no break on Friday</td>')+'</tr>';
+    if(t.breakAfter===p) h+='<tr class="brk"><td class="k">BREAK</td>'+
+      '<td>'+esc(t.brk.mt||'—')+'</td>'+
+      (t.brk.fri?'<td>'+esc(t.brk.fri)+'</td>':'<td class="void">no break on Friday</td>')+'</tr>';
   }
   h+='</tbody></table><div class="pfoot">Times as displayed on the school Time Division notice.</div></div>';
   return h;
@@ -1671,7 +1699,7 @@ function pClassMaster(){
     '<table class="pt">'+masterCols('class')+'<thead><tr><th>Class</th><th>Class teacher</th>'+ph.a+'</tr>'+ 
     '<tr><th class="t2"></th><th class="t2"></th>'+ph.b+'</tr></thead><tbody>';
   S.classes.forEach(function(c,ri){
-    h+='<tr><td class="k">'+esc(c.name)+'</td><td style="font-size:8.5px">'+esc(tname(c.ct))+'</td>';
+    h+='<tr><td class="k">'+esc(c.name)+'</td><td class="ctname">'+esc(tname(c.ct))+'</td>';
     for(var p=1;p<=NP();p++){
       if(S.timing.breakAfter===p-1 && p>1 && ri===0)
         h+='<td class="brkc" rowspan="'+S.classes.length+'"><span>BREAK '+esc(S.timing.brk.mt)+'</span></td>';
@@ -1689,13 +1717,13 @@ function pClassMaster(){
 function pTeacherMaster(){
   var ph=ptHead();
   var h='<div class="psheet master-onepage teacher-master">'+hdr('TEACHER-WISE TIMETABLE — ALL TEACHERS', metaLine())+
-    '<table class="pt">'+masterCols('teacher')+'<thead><tr><th>Teacher</th><th>Class<br>teacher</th>'+ph.a+'<th>Total/day</th><th>Free/day</th></tr>'+ 
+    '<table class="pt">'+masterCols('teacher')+'<thead><tr><th>Teacher</th><th>Class<br>teacher</th>'+ph.a+'<th>Total<br>per day</th><th>Free<br>per day</th></tr>'+
     '<tr><th class="t2"></th><th class="t2"></th>'+ph.b+'<th class="t2"></th><th class="t2"></th></tr></thead><tbody>';
   S.teachers.forEach(function(t,ri){
     var lr=teacherLoadRange(t.id);
     var ct=S.classes.filter(function(c){ return c.ct===t.id; }).map(function(c){return c.name;}).join(', ')||'—';
-    h+='<tr><td class="k">'+esc(t.name)+'<br><span style="font-weight:400;font-size:7.5px">'+esc(t.desig)+'</span></td>'+
-       '<td style="font-size:8.5px">'+esc(ct)+'</td>';
+    h+='<tr><td class="k">'+esc(t.name)+'<br><span class="desig">'+esc(t.desig)+'</span></td>'+
+       '<td class="ctname">'+esc(ct)+'</td>';
     for(var p=1;p<=NP();p++){
       if(S.timing.breakAfter===p-1 && p>1 && ri===0)
         h+='<td class="brkc" rowspan="'+S.teachers.length+'"><span>BREAK '+esc(S.timing.brk.mt)+'</span></td>';
@@ -1704,21 +1732,21 @@ function pTeacherMaster(){
       var cl=gs.some(function(g){return g.got.length>1;})?' class="problem"':'';
       h+='<td'+cl+'>'+teacherSlotPrintHtml(t.id,p)+'</td>';
     }
-    h+='<td class="k">'+lr.text+'</td><td style="font-size:8px;font-weight:800">'+teacherFreeRange(t.id)+'</td></tr>';
+    h+='<td class="k">'+lr.text+'</td><td class="free-count">'+teacherFreeRange(t.id)+'</td></tr>';
   });
   h+='</tbody></table><div class="pfoot">Split cells show weekdays. Total and Free are weekday ranges; blank cells mean the teacher is free every running day.</div></div>';
   return h;
 }
 function cardRows(getter){
   var t=S.timing, h='';
-  h+='<tr class="asm"><td>'+esc(t.assembly.label.toUpperCase())+'</td><td>'+esc(t.assembly.mt)+'</td><td>'+
+  h+='<tr class="asm"><td>'+esc(t.assembly.label.toUpperCase())+'</td><td class="card-time">'+esc(t.assembly.mt)+'</td><td class="card-time">'+
      esc(t.assembly.fri||'—')+'</td><td colspan="2">'+esc(t.assembly.label)+'</td></tr>';
   for(var p=1;p<=NP();p++){
     var pr=t.periods[p-1], v=getter(p);
-    h+='<tr'+(v.free?' class="free"':'')+'><td class="p">P'+p+'</td><td>'+esc(pr.mt)+'</td>'+
-       '<td>'+(pr.fri?esc(pr.fri):'<span style="font-style:italic;font-weight:800">—</span>')+'</td>'+
+    h+='<tr'+(v.free?' class="free"':'')+'><td class="p">P'+p+'</td><td class="card-time">'+esc(pr.mt)+'</td>'+
+       '<td class="card-time">'+(pr.fri?esc(pr.fri):'<span class="dash">—</span>')+'</td>'+
        '<td class="mainv">'+esc(v.main)+'</td><td>'+esc(v.side||'')+'</td></tr>';
-    if(t.breakAfter===p) h+='<tr class="brk"><td>BREAK</td><td>'+esc(t.brk.mt)+'</td><td>'+
+    if(t.breakAfter===p) h+='<tr class="brk"><td>BREAK</td><td class="card-time">'+esc(t.brk.mt)+'</td><td class="card-time">'+
       (t.brk.fri?esc(t.brk.fri):'—')+'</td><td colspan="2">BREAK'+(t.brk.fri?'':'  (Monday to Thursday only)')+'</td></tr>';
   }
   return h;
@@ -1727,7 +1755,7 @@ function pClassCard(c){
   return '<div class="psheet pp"><div class="psub">CLASS TIMETABLE</div>'+ 
     '<div class="pbig">'+esc(c.name)+'</div>'+
     '<div class="pinfo">Class teacher: '+esc(tname(c.ct))+'</div>'+
-    '<div class="pfoot" style="margin:4px 0">'+esc(metaLine())+'</div>'+
+    '<div class="pfoot meta-foot">'+esc(metaLine())+'</div>'+
     '<table class="pcard"><thead><tr><th>Period</th><th>Time<br>Mon–Thu</th><th>Time<br>Friday</th>'+
     '<th>Subject</th><th>Teacher</th></tr></thead><tbody>'+
     cardRows(function(p){
@@ -1746,7 +1774,7 @@ function pTeacherCard(t){
   return '<div class="psheet pp"><div class="psub">TEACHER TIMETABLE</div>'+
     '<div class="pbig">'+esc(t.name)+'</div>'+
     '<div class="pinfo">'+esc(t.desig)+'     |     Class teacher of: '+esc(ct)+'</div>'+
-    '<div class="pfoot" style="margin:4px 0">'+esc(metaLine())+'</div>'+
+    '<div class="pfoot meta-foot">'+esc(metaLine())+'</div>'+
     '<table class="pcard"><thead><tr><th>Period</th><th>Time<br>Mon–Thu</th><th>Time<br>Friday</th>'+ 
     '<th>Class</th><th>Subject</th></tr></thead><tbody>'+ 
     cardRows(function(p){
