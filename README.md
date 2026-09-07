@@ -44,6 +44,7 @@ The default Firestore database is reserved for the timetable portal. The rules d
 - **Duplicate** creates another version without changing the original.
 - **Versions** shows up to the latest 50 saved versions and can restore an earlier state.
 - **New timetable from same school setup** keeps teachers, classes, subjects and timings, while clearing lessons, leave and cover.
+- **Teacher priority** is stored in the timetable itself. Existing timetables are grouped with EST teachers first and PST teachers second; drag roster rows to create a custom order. Teacher screens, dropdowns, CSV exports and printable teacher sheets use the same saved order.
 
 ## Verified A4 PDFs
 

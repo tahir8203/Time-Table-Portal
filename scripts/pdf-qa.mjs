@@ -21,6 +21,25 @@ try {
   const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
   await page.goto(baseUrl, { waitUntil: "networkidle" });
   const source = await page.evaluate(() => {
+    const originalTeachers = S.teachers.slice();
+    const originalMode = S.teacherOrderMode;
+    const originalDirty = DIRTY;
+    const defaultTeacherRanks = originalTeachers.map(teacherGroupRank);
+    const estBeforePst = defaultTeacherRanks.every((rank, index) => index === 0 || defaultTeacherRanks[index - 1] <= rank);
+    const moved = moveTeacherInRoster(originalTeachers.at(-1).id, originalTeachers[0].id, false);
+    const customTeacherNames = S.teachers.map((teacher) => teacher.name);
+    const teacherMaster = new DOMParser().parseFromString(buildPrint("tmaster"), "text/html");
+    const printedMasterNames = Array.from(teacherMaster.querySelectorAll(".teacher-master tbody tr > td.k:first-child"))
+      .map((cell) => cell.childNodes[0]?.textContent?.trim() || "");
+    const teacherCards = new DOMParser().parseFromString(buildPrint("tcards"), "text/html");
+    const printedCardNames = Array.from(teacherCards.querySelectorAll(".psheet .pbig")).map((cell) => cell.textContent.trim());
+    const customOrderReflected = moved
+      && JSON.stringify(customTeacherNames) === JSON.stringify(printedMasterNames)
+      && JSON.stringify(customTeacherNames) === JSON.stringify(printedCardNames);
+    S.teachers = originalTeachers;
+    S.teacherOrderMode = originalMode;
+    DIRTY = originalDirty;
+
     const modes = ["all", "coverday", "covermonth"];
     const documents = Object.fromEntries(modes.map((mode) => [mode, buildPrint(mode)]));
     const textOf = (html) => {
@@ -76,9 +95,17 @@ try {
         doubleBookings: Object.values(teacherCounts).filter((count) => count > 1).length,
         classTeachers: Object.keys(classTeacherMap).length,
         classTeacherAssignments: Object.values(reverseClassTeacherMap).reduce((sum, classes) => sum + classes.length, 0),
+        estBeforePst,
+        customOrderReflected,
       },
     };
   });
+
+  if (source.validation.bidirectionalDifferences || source.validation.doubleBookings
+      || source.validation.classTeachers !== source.validation.classTeacherAssignments
+      || !source.validation.estBeforePst || !source.validation.customOrderReflected) {
+    throw new Error(`Timetable validation failed: ${JSON.stringify(source.validation)}`);
+  }
 
   const all = await buildPdf(cleanFragment(source.documents.all), "all");
   const coverDay = await buildPdf(cleanFragment(source.documents.coverday), "coverday");

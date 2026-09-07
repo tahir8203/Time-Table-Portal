@@ -63,6 +63,7 @@ function normalizeState(value) {
   state.cover ||= {};
   state.rules ||= { maxConsecutive: 6, defaultMax: 8 };
   if (!state.plan && typeof window.planFrom === "function") state.plan = window.planFrom(state);
+  if (typeof window.ensureTeacherOrder === "function") window.ensureTeacherOrder(state);
   return state;
 }
 
@@ -108,7 +109,7 @@ function parentRecord(name, state, includeCreated, versionCount) {
     effectiveFrom: state.meta?.wef || "",
     state,
     ownerUid: user.uid,
-    schemaVersion: 3,
+    schemaVersion: 4,
     versionCount,
     updatedAt: serverTimestamp(),
   };
