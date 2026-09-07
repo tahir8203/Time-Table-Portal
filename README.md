@@ -46,6 +46,7 @@ The default Firestore database is reserved for the timetable portal. The rules d
 - **New timetable from same school setup** keeps teachers, classes, subjects and timings, while clearing lessons, leave and cover.
 - **Teacher priority** is stored in the timetable itself. Existing timetables are grouped with EST teachers first and PST teachers second; drag roster rows to create a custom order. Teacher screens, dropdowns, CSV exports and printable teacher sheets use the same saved order.
 - **Fixed Auto-build periods** let each lesson-plan row pin one occurrence to P1-P8. Fixed slots are hard constraints, save with Firebase versions and remain fixed in every generated and printed timetable.
+- **Upper-class subject protection** prevents grade 6 and above from receiving the same subject twice on one weekday. Manual edits are blocked, Auto-build validates the lesson plan, and existing repeats are highlighted.
 
 ## Verified A4 PDFs
 

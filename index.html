@@ -160,6 +160,9 @@ td.num,th.num{text-align:center}
 .grid td.slot.empty{background:repeating-linear-gradient(135deg,var(--empty-a),var(--empty-a) 5px,var(--empty-b) 5px,var(--empty-b) 10px)}
 .grid td.slot.clash{background:var(--seal-bg)!important;box-shadow:inset 0 0 0 2px var(--seal)}
 .grid td.slot.clash .t{color:var(--seal);font-weight:700}
+.grid td.slot.repeat{background:var(--amber-bg)!important;box-shadow:inset 0 0 0 2px var(--amber)}
+.grid td.slot.repeat .s{color:var(--text);text-decoration:underline;text-decoration-thickness:2px}
+.grid td.slot.clash.repeat{background:var(--seal-bg)!important;box-shadow:inset 0 0 0 2px var(--seal)}
 .grid td.slot.locked::after{content:"";position:absolute;top:3px;right:3px;width:5px;height:5px;background:var(--amber);border-radius:50%}
 .grid td.slot.split{min-width:158px;height:auto}
 .grid td.slot .dayline{display:block;padding:2px 1px;border-bottom:1px solid var(--rule-soft);line-height:1.15}
@@ -526,6 +529,41 @@ function slotHasClash(cid,p,week){
     var e=cell(cid,p,d.id); return e && !!week.clash[d.id+'|'+e.t+'|'+p];
   });
 }
+function upperClassNoRepeat(c){
+  var m=String(c&&c.name||'').match(/\d+/); return !!m&&+m[0]>=6;
+}
+function subjectRepeatAnalysis(day){
+  var slots={}, issues=[];
+  S.classes.forEach(function(c){
+    if(!upperClassNoRepeat(c)) return;
+    var by={};
+    for(var p=1;p<=c.periods;p++){
+      if(!dayPeriodRuns(day,p)) continue;
+      var e=cell(c.id,p,day); if(e&&e.s) (by[e.s]=by[e.s]||[]).push(p);
+    }
+    Object.keys(by).forEach(function(sid){
+      if(by[sid].length<2) return;
+      by[sid].forEach(function(p){ slots[c.id+'|'+p]=true; });
+      issues.push({c:c.id,s:sid,periods:by[sid].slice()});
+    });
+  });
+  return {slots:slots,issues:issues};
+}
+function subjectRepeatWeekSlots(){
+  var slots={};
+  WEEKDAYS.forEach(function(d){
+    var a=subjectRepeatAnalysis(d.id); Object.keys(a.slots).forEach(function(k){slots[k]=true;});
+  });
+  return slots;
+}
+function subjectRepeatsElsewhere(cid,p,day,sid){
+  var c=C(cid), found=[]; if(!upperClassNoRepeat(c)||!sid) return found;
+  for(var q=1;q<=c.periods;q++){
+    if(q===p||!dayPeriodRuns(day,q)) continue;
+    var e=cell(cid,q,day); if(e&&e.s===sid) found.push(q);
+  }
+  return found;
+}
 function teacherLoadRange(tid){
   var a=WEEKDAYS.map(function(d){return analyse(d.id).load[tid]||0;});
   return {min:Math.min.apply(null,a),max:Math.max.apply(null,a),text:Math.min.apply(null,a)===Math.max.apply(null,a)?String(a[0]):Math.min.apply(null,a)+'–'+Math.max.apply(null,a)};
@@ -621,6 +659,7 @@ document.addEventListener('keydown', function(e){ if(e.key==='Escape') closeDlg(
 /* ============================ view: overview ============================ */
 function vDash(){
   var a=analyse(VIEWDAY), nClash=Object.keys(a.clash).length;
+  var repeats=subjectRepeatAnalysis(VIEWDAY), nRepeat=repeats.issues.length;
   var slots=0, filled=0;
   S.classes.forEach(function(c){ for(var p=1;p<=c.periods;p++) if(dayPeriodRuns(VIEWDAY,p)){ slots++; if(cell(c.id,p,VIEWDAY)) filled++; } });
   var over=S.teachers.filter(function(t){ return (a.load[t.id]||0) > (t.max||8); });
@@ -637,12 +676,15 @@ function vDash(){
   h += nClash
     ? '<div class="banner bad"><b>'+nClash+' '+dayTitle(VIEWDAY)+' clash'+(nClash>1?'es':'')+' to resolve.</b> A teacher is booked in two classes at the same time. Open the class timetable — the affected cells are outlined in red.</div>'
     : '<div class="banner ok"><b>No clashes on '+dayTitle(VIEWDAY)+'.</b> Every teacher is in one place at a time.</div>';
+  if(nRepeat) h+='<div class="banner warn"><b>'+nRepeat+' repeated upper-class subject'+(nRepeat>1?'s':'')+' on '+dayTitle(VIEWDAY)+'.</b> '+
+    'Grades 6 and above may use each subject only once per day. Open the class timetable; repeated cells are outlined in amber.</div>';
   if(filled<slots) h+='<div class="banner warn">'+(slots-filled)+' period'+((slots-filled)>1?'s are':' is')+' still empty. Fill them in the class timetable, or run Auto-build.</div>';
 
   h+='<div class="stats">'+
     st('Classes', S.classes.length)+ st('Teachers', S.teachers.length)+ st('Subjects', S.subjects.length)+
     st(dayTitle(VIEWDAY)+' periods', filled+' / '+slots, filled===slots?'ok':'warn')+
     st('Clashes', nClash, nClash?'bad':'ok')+
+    st('Repeated subjects', nRepeat, nRepeat?'warn':'ok')+
     st('Load spread', spread, spread>2?'warn':'ok')+
     '</div>';
 
@@ -663,11 +705,12 @@ function vDash(){
   });
   h+='</tbody></table></div></div>';
 
-  if(over.length||idle.length||long.length){
+  if(over.length||idle.length||long.length||nRepeat){
     h+='<div class="card"><h2>Worth a look</h2><div class="body"><ul class="tight">';
     over.forEach(function(t){ h+='<li><b>'+esc(t.name)+'</b> has '+(a.load[t.id])+' periods, above the limit of '+(t.max||8)+' set for them.</li>'; });
     long.forEach(function(t){ h+='<li><b>'+esc(t.name)+'</b> teaches '+runsFor(t.id,VIEWDAY).longest+' periods back to back with no gap.</li>'; });
     idle.forEach(function(t){ h+='<li><b>'+esc(t.name)+'</b> has no periods and is free all day — available for cover.</li>'; });
+    repeats.issues.forEach(function(issue){ h+='<li><b>'+esc(cname(issue.c))+'</b> repeats '+esc(sname(issue.s))+' in '+issue.periods.map(function(p){return 'P'+p;}).join(' and ')+'.</li>'; });
     h+='</ul></div></div>';
   }
   return h;
@@ -693,13 +736,13 @@ function periodHead(){
   return {h:h,h2:h2};
 }
 function vGrid(){
-  var week=analyseWeek(), ph=periodHead();
+  var week=analyseWeek(), ph=periodHead(), repeatSlots=subjectRepeatWeekSlots();
   var h='<div class="phead"><div><h1>Class timetable</h1>'+ 
-    '<div class="note">Click any cell to set one lesson for every day, or different lessons for selected weekdays.</div></div></div>';
+    '<div class="note">Click any cell to set one lesson for every day, or different lessons for selected weekdays. In grades 6 and above, each subject may appear only once per weekday.</div></div></div>';
   h+='<div class="bar"><button class="btn" id="gClear">Clear all unlocked</button>'+
      '<button class="btn" id="gLockAll">Lock every filled cell</button>'+
      '<button class="btn" id="gUnlock">Unlock all</button>'+
-     '<span class="spacer"></span><span class="small muted">Amber dot = locked, kept by Auto-build</span></div>';
+     '<span class="spacer"></span><span class="small muted">Amber dot = locked · amber outline = repeated upper-class subject</span></div>';
   h+='<div class="card"><div class="tw"><table class="grid"><thead><tr><th>Class</th><th>Class teacher</th>'+ph.h+
      '</tr><tr><th class="t2"></th><th class="t2"></th>'+ph.h2+'</tr></thead><tbody>';
   S.classes.forEach(function(c){
@@ -711,11 +754,12 @@ function vGrid(){
       if(!e) cl+=' empty';
       else{
         if(slotHasClash(c.id,p,week)) cl+=' clash';
+        if(repeatSlots[c.id+'|'+p]) cl+=' repeat';
         if(isSplitSlot(c.id,p)) cl+=' split';
         inner=classSlotHtml(c.id,p);
       }
       if(isLocked(c.id,p)) cl+=' locked';
-      h+='<td class="'+cl+'" data-c="'+c.id+'" data-p="'+p+'">'+inner+'</td>';
+      h+='<td class="'+cl+'" data-c="'+c.id+'" data-p="'+p+'"'+(repeatSlots[c.id+'|'+p]?' title="Subject repeats in this class on at least one weekday"':'')+'>'+inner+'</td>';
     }
     h+='</tr>';
   });
@@ -758,7 +802,8 @@ function editSlot(cid,p){
       '<td id="edW_'+d.id+'" class="daystatus"></td></tr>';
   }).join('');
   openDlg(esc(c.name)+' — Period '+p+'  <span class="hint">'+esc(S.timing.periods[p-1].mt)+'</span>',
-    '<div class="small muted">Set each weekday separately. Use the copy buttons for a 3-day/2-day split, or change any individual day.</div>'+ 
+    '<div class="small muted">Set each weekday separately. Use the copy buttons for a 3-day/2-day split, or change any individual day.'+
+    (upperClassNoRepeat(c)?' This upper class may use each subject only once per weekday.':'')+'</div>'+
     '<div class="rowflex"><button class="btn sm" id="edFirst3">Copy Monday to Mon–Wed</button>'+ 
     '<button class="btn sm" id="edLast2">Copy Thursday to Thu–Fri</button>'+ 
     '<button class="btn sm" id="edAll">Copy Monday to every day</button></div>'+ 
@@ -767,13 +812,21 @@ function editSlot(cid,p){
     '<button class="btn" id="edDel">Clear whole slot</button><span class="spacer"></span>'+ 
     '<button class="btn" onclick="closeDlg()">Cancel</button><button class="btn pri" id="edOk">Save weekday lessons</button>');
   function warn(day){
-    var sel=$('edT_'+day), w=$('edW_'+day); if(!sel||!w) return;
+    var sel=$('edT_'+day), subj=$('edS_'+day), w=$('edW_'+day); if(!sel||!subj||!w) return;
+    var repeated=subjectRepeatsElsewhere(cid,p,day,subj.value);
+    if(repeated.length){
+      w.textContent='Subject already in '+repeated.map(function(q){return 'P'+q;}).join(', ');
+      w.style.color='var(--seal)'; w.style.fontWeight='700'; return;
+    }
     var tid=sel.value; if(!tid){ w.textContent='Choose teacher'; w.style.color='var(--text-soft)'; return; }
     var busy=teacherAt(tid,p,day).filter(function(x){ return x.c!==cid; });
     w.textContent=busy.length?'Busy in '+busy.map(function(x){return cname(x.c);}).join(', '):'Free';
     w.style.color=busy.length?'var(--seal)':'var(--leaf)'; w.style.fontWeight='700';
   }
-  WEEKDAYS.forEach(function(d){ var sel=$('edT_'+d.id); if(sel){sel.onchange=function(){warn(d.id);};warn(d.id);} });
+  WEEKDAYS.forEach(function(d){
+    var teacher=$('edT_'+d.id), subject=$('edS_'+d.id);
+    if(teacher&&subject){ teacher.onchange=function(){warn(d.id);}; subject.onchange=function(){warn(d.id);}; warn(d.id); }
+  });
   function copyLesson(from,to){
     var fs=$('edS_'+from), ft=$('edT_'+from); if(!fs||!ft) return;
     to.forEach(function(d){ var ds=$('edS_'+d),dt=$('edT_'+d); if(ds&&dt){ds.value=fs.value;dt.value=ft.value;warn(d);} });
@@ -790,6 +843,13 @@ function editSlot(cid,p){
       vals[d.id]={s:s,t:t};
     });
     if(bad){ toast('Choose subject and teacher for '+bad); return; }
+    var duplicate='';
+    Object.keys(vals).some(function(d){
+      var ps=subjectRepeatsElsewhere(cid,p,d,vals[d].s);
+      if(ps.length){ duplicate=dayTitle(d)+': '+sname(vals[d].s)+' already appears in '+ps.map(function(q){return 'P'+q;}).join(', '); return true; }
+      return false;
+    });
+    if(duplicate){ toast('Not saved — '+duplicate); return; }
     var base=vals.mon||vals[Object.keys(vals)[0]], v={s:base.s,t:base.t}, days={};
     Object.keys(vals).forEach(function(d){ if(lessonKey(vals[d])!==lessonKey(base)) days[d]=vals[d]; });
     var split=Object.keys(days).length>0;
@@ -1132,7 +1192,7 @@ function vGen(){
   var h='<div class="phead"><div><h1>Auto-build</h1>'+ 
     '<div class="note">You decide which teacher takes which subject in each class, and how many periods a day. '+
     'Auto-build works out where in the day each one goes without creating a clash. '+
-    'Choose a fixed period when a lesson must stay in P1–P8. The plan and its fixed slots are saved online with your timetable.</div></div></div>';
+    'Choose a fixed period when a lesson must stay in P1–P8. Grades 6 and above cannot repeat a subject during the same day. The plan and its fixed slots are saved online with your timetable.</div></div></div>';
   h+='<div class="bar"><button class="btn pri" id="genRun">Build timetable</button>'+
      '<button class="btn" id="genLoad">Reload plan from current timetable</button>'+
      '<button class="btn" id="genAddRow">Add a lesson</button>'+
@@ -1201,7 +1261,7 @@ function bindGen(){
 
 /* ---- the solver ---- */
 function autoBuildFixedState(REQS){
-  var fixed={}, manualLocks={}, planLocks={}, planned={}, problems=[], seen={}, fixedClashes={}, counts={}, runs={};
+  var fixed={}, manualLocks={}, planLocks={}, planned={}, problems=[], seen={}, fixedClashes={}, fixedSubjects={}, fixedSubjectClashes={}, counts={}, runs={};
   function problem(message){ if(problems.indexOf(message)<0) problems.push(message); }
   Object.keys(S.locks||{}).forEach(function(k){
     if((S.planLocks||{})[k]) return;
@@ -1227,7 +1287,7 @@ function autoBuildFixedState(REQS){
     });
   });
   Object.keys(fixed).forEach(function(k){
-    var a=k.split('|'), cid=a[0], p=+a[1];
+    var a=k.split('|'), cid=a[0], p=+a[1], c=C(cid);
     runningDayIds(p).forEach(function(d){
       var e=lessonOn(fixed[k],d); if(!e||!e.t) return;
       var t=T(e.t), slot=d+'|'+e.t+'|'+p, dayTeacher=d+'|'+e.t;
@@ -1241,6 +1301,17 @@ function autoBuildFixedState(REQS){
       }
       seen[slot]=cid; counts[dayTeacher]=(counts[dayTeacher]||0)+1;
       (runs[dayTeacher]=runs[dayTeacher]||{})[p]=true;
+      if(upperClassNoRepeat(c)&&e.s){
+        var subjectKey=d+'|'+cid+'|'+e.s, other=fixedSubjects[subjectKey];
+        if(other&&other!==p){
+          var periods=[other,p].sort(function(x,y){return x-y;}), repeatKey=cid+'|'+e.s+'|'+periods.join('|');
+          if(!fixedSubjectClashes[repeatKey]){
+            problem(c.name+' repeats '+sname(e.s)+' in fixed P'+periods[0]+' and P'+periods[1]);
+            fixedSubjectClashes[repeatKey]=true;
+          }
+        }
+        fixedSubjects[subjectKey]=p;
+      }
     });
   });
   Object.keys(counts).forEach(function(k){
@@ -1259,6 +1330,13 @@ function runSolver(){
   var prep=autoBuildFixedState(REQS), lessons={}, problems=prep.problems.slice();
   S.classes.forEach(function(c){
     var rs=REQS[c.id]||[], arr=[];
+    if(upperClassNoRepeat(c)){
+      var requested={};
+      rs.forEach(function(r){ requested[r.s]=(requested[r.s]||0)+(+r.n||0); });
+      Object.keys(requested).forEach(function(sid){
+        if(requested[sid]>1) problems.push(c.name+' cannot repeat '+sname(sid)+': the lesson plan asks for '+requested[sid]+' periods per day');
+      });
+    }
     rs.forEach(function(r){ for(var i=0;i<r.n;i++) arr.push({ s:r.s, t:r.t }); });
     // Remove one planned occurrence for every hard-fixed class slot.
     var fixedCount=0;
@@ -1320,13 +1398,14 @@ function runSolver(){
   toast('Timetable built');
 }
 function attempt(order, pool, np, fixed){
-  var placed={}, busy={}, cnt={}, seq={};
+  var placed={}, busy={}, cnt={}, seq={}, usedSubjects={};
   Object.keys(fixed||{}).forEach(function(k){
-    var p=+k.split('|')[1];
+    var parts=k.split('|'), cid=parts[0], p=+parts[1];
     runningDayIds(p).forEach(function(d){
         var e=lessonOn(fixed[k],d); if(!e) return;
         var dk=d+'|'+e.t;
         busy[dk+'|'+p]=true; cnt[dk]=(cnt[dk]||0)+1; (seq[dk]=seq[dk]||{})[p]=true;
+        if(upperClassNoRepeat(C(cid))&&e.s) usedSubjects[d+'|'+cid+'|'+e.s]=true;
       });
   });
   var nodes=0;
@@ -1346,18 +1425,22 @@ function attempt(order, pool, np, fixed){
       if(tried[key]) continue; tried[key]=true;
       var tt=T(L.t);
       if(tt && tt.unavail.indexOf(sl.p)>=0) continue;
+      var noRepeat=upperClassNoRepeat(C(sl.c));
       var days=runningDayIds(sl.p), ok=days.every(function(d){
         var dk=d+'|'+L.t;
-        return !busy[dk+'|'+sl.p] && (cnt[dk]||0)<(tt?(tt.max||np):np) && runLen(dk,sl.p)<=S.rules.maxConsecutive;
+        return !busy[dk+'|'+sl.p] && (cnt[dk]||0)<(tt?(tt.max||np):np) && runLen(dk,sl.p)<=S.rules.maxConsecutive &&
+          (!noRepeat||!usedSubjects[d+'|'+sl.c+'|'+L.s]);
       });
       if(!ok) continue;
-      days.forEach(function(d){ var dk=d+'|'+L.t; busy[dk+'|'+sl.p]=true; cnt[dk]=(cnt[dk]||0)+1; (seq[dk]=seq[dk]||{})[sl.p]=true; });
+      days.forEach(function(d){ var dk=d+'|'+L.t; busy[dk+'|'+sl.p]=true; cnt[dk]=(cnt[dk]||0)+1; (seq[dk]=seq[dk]||{})[sl.p]=true;
+        if(noRepeat) usedSubjects[d+'|'+sl.c+'|'+L.s]=true; });
       placed[sl.c+'|'+sl.p]={ s:L.s, t:L.t };
       arr.splice(j,1);
       if(bt(i+1)) return true;
       arr.splice(j,0,L);
       delete placed[sl.c+'|'+sl.p];
-      days.forEach(function(d){ var dk=d+'|'+L.t; delete busy[dk+'|'+sl.p]; cnt[dk]--; delete seq[dk][sl.p]; });
+      days.forEach(function(d){ var dk=d+'|'+L.t; delete busy[dk+'|'+sl.p]; cnt[dk]--; delete seq[dk][sl.p];
+        if(noRepeat) delete usedSubjects[d+'|'+sl.c+'|'+L.s]; });
     }
     return false;
   }
@@ -1873,7 +1956,7 @@ function masterCols(kind){
   return h+'</colgroup>';
 }
 function pClassMaster(){
-  var week=analyseWeek(), ph=ptHead();
+  var week=analyseWeek(), repeatSlots=subjectRepeatWeekSlots(), ph=ptHead();
   var h='<div class="psheet master-onepage class-master">'+hdr('CLASS-WISE TIMETABLE — ALL CLASSES', metaLine())+
     '<table class="pt">'+masterCols('class')+'<thead><tr><th>Class</th><th>Class teacher</th>'+ph.a+'</tr>'+ 
     '<tr><th class="t2"></th><th class="t2"></th>'+ph.b+'</tr></thead><tbody>';
@@ -1885,12 +1968,12 @@ function pClassMaster(){
       if(p>c.periods){ h+='<td class="void">—</td>'; continue; }
       var e=cell(c.id,p);
       if(!e){ h+='<td class="void">empty</td>'; continue; }
-      var cl=slotHasClash(c.id,p,week)?' class="problem"':'';
+      var cl=(slotHasClash(c.id,p,week)||repeatSlots[c.id+'|'+p])?' class="problem"':'';
       h+='<td'+cl+'>'+classSlotPrintHtml(c.id,p)+'</td>';
     }
     h+='</tr>';
   });
-  h+='</tbody></table><div class="pfoot">Split cells show the weekdays for each lesson. Times under each period are Monday to Thursday, with Friday beneath.</div></div>';
+  h+='</tbody></table><div class="pfoot">Split cells show the weekdays for each lesson. Outlined cells need attention: a teacher clash or a repeated subject in grade 6 and above.</div></div>';
   return h;
 }
 function pTeacherMaster(){
@@ -1922,7 +2005,7 @@ function cardRows(getter){
      esc(t.assembly.fri||'—')+'</td><td colspan="2">'+esc(t.assembly.label)+'</td></tr>';
   for(var p=1;p<=NP();p++){
     var pr=t.periods[p-1], v=getter(p);
-    h+='<tr'+(v.free?' class="free"':'')+'><td class="p">P'+p+'</td><td class="card-time">'+esc(pr.mt)+'</td>'+
+    h+='<tr'+(v.problem?' class="problem"':v.free?' class="free"':'')+'><td class="p">P'+p+'</td><td class="card-time">'+esc(pr.mt)+'</td>'+
        '<td class="card-time">'+(pr.fri?esc(pr.fri):'<span class="dash">—</span>')+'</td>'+
        '<td class="mainv">'+esc(v.main)+'</td><td>'+esc(v.side||'')+'</td></tr>';
     if(t.breakAfter===p) h+='<tr class="brk"><td>BREAK</td><td class="card-time">'+esc(t.brk.mt)+'</td><td class="card-time">'+
@@ -1931,6 +2014,7 @@ function cardRows(getter){
   return h;
 }
 function pClassCard(c){
+  var repeatSlots=subjectRepeatWeekSlots();
   return '<div class="psheet pp"><div class="psub">CLASS TIMETABLE</div>'+ 
     '<div class="pbig">'+esc(c.name)+'</div>'+
     '<div class="pinfo">Class teacher: '+esc(tname(c.ct))+'</div>'+
@@ -1941,11 +2025,11 @@ function pClassCard(c){
       if(p>c.periods) return { main:'no period', side:'', free:true };
       var gs=slotGroups(c.id,p);
       if(!gs.length) return { main:'not set', side:'', free:true };
-      return { main:gs.map(function(g){return (gs.length>1?dayLabel(g.days)+': ':'')+sname(g.s);}).join(' / '),
+      return { problem:!!repeatSlots[c.id+'|'+p], main:gs.map(function(g){return (gs.length>1?dayLabel(g.days)+': ':'')+sname(g.s);}).join(' / '),
         side:gs.map(function(g){return (gs.length>1?dayLabel(g.days)+': ':'')+tname(g.t);}).join(' / ') };
     })+'</tbody></table>'+ 
     '<div class="psum">Filled periods per weekday: '+classFilledRange(c.id)+'    |    Class teacher: '+esc(tname(c.ct))+'</div>'+ 
-    '<div class="pfoot">Weekday labels appear when a slot has different lessons. A dash in the Friday time column means that period does not run on Friday.</div></div>';
+    '<div class="pfoot">Weekday labels appear when assignments differ. An outlined row marks a repeated upper-class subject. A dash means that period does not run on Friday.</div></div>';
 }
 function pTeacherCard(t){
   var lr=teacherLoadRange(t.id);
@@ -2138,6 +2222,7 @@ function vHelp(){
    '<li><b>Check the timings</b>Open <i>Period timings</i>. These times print on every sheet, so get them right first.</li>'+
    '<li><b>Fill the timetable</b>Open <i>Class timetable</i> and click any cell. Set the same lesson for every day, or give selected weekdays different subjects and teachers. Or use <i>Auto-build</i> to place the regular lessons at once.</li>'+ 
    '<li><b>Fix required periods</b>In <i>Auto-build</i>, choose P1–P8 in the Fixed period column for any lesson that must stay in that slot. Choose Any period when Auto-build may place it freely.</li>'+
+   '<li><b>Upper-class subject rule</b>For grade 6 and above, the same subject cannot appear twice on one weekday. Manual editing and Auto-build both enforce this rule; existing repeats are outlined in amber.</li>'+
    '<li><b>Watch the Overview</b>It tells you about clashes, empty periods and teachers carrying too much or too little.</li>'+
    '<li><b>Print</b>Open <i>Print &amp; export</i> and download the required verified A4 PDF.</li>'+
    '<li><b>Save your work</b>Open <i>Cloud timetables</i>. Changes to an opened timetable save online automatically and create recoverable versions.</li>'+ 
