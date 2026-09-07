@@ -385,7 +385,7 @@ function buildSeed(){
         {mt:'12:55 - 1:30', fri:''}
       ]
     },
-    teachers:[], classes:[], subjects:[], tt:{}, locks:{}, leave:{}, cover:{},
+    teachers:[], classes:[], subjects:[], tt:{}, locks:{}, planLocks:{}, leave:{}, cover:{},
     teacherOrderMode:'grouped', teacherOrderVersion:1,
     rules:{ maxConsecutive:6, defaultMax:8 }
   };
@@ -417,9 +417,13 @@ function planFrom(st){
   st.classes.forEach(function(c){
     m[c.id]=[];
     for(var p=1;p<=st.timing.periods.length;p++){
-      var e=st.tt[c.id+'|'+p]; if(!e) continue;
-      var f=m[c.id].filter(function(r){ return r.s===e.s && r.t===e.t; })[0];
-      if(f) f.n++; else m[c.id].push({ s:e.s, t:e.t, n:1 });
+      var k=c.id+'|'+p, e=st.tt[k]; if(!e) continue;
+      if(st.locks&&st.locks[k]&&!e.days){
+        m[c.id].push({ s:e.s, t:e.t, n:1, p:p });
+        continue;
+      }
+      var f=m[c.id].filter(function(r){ return !r.p&&r.s===e.s&&r.t===e.t; })[0];
+      if(f) f.n++; else m[c.id].push({ s:e.s, t:e.t, n:1, p:0 });
     }
   });
   return m;
@@ -729,9 +733,10 @@ function bindGrid(){
   };
   if($('gLockAll')) $('gLockAll').onclick=function(){
     S.classes.forEach(function(c){ for(var p=1;p<=NP();p++) if(cell(c.id,p)) S.locks[c.id+'|'+p]=true; });
+    S.planLocks={};
     DIRTY=true; render(); toast('Locked every filled period');
   };
-  if($('gUnlock')) $('gUnlock').onclick=function(){ S.locks={}; DIRTY=true; render(); toast('Unlocked all'); };
+  if($('gUnlock')) $('gUnlock').onclick=function(){ S.locks={}; S.planLocks={}; DIRTY=true; render(); toast('Unlocked all'); };
 }
 function editSlot(cid,p){
   var c=C(cid), e=cell(cid,p)||{s:'',t:''};
@@ -790,10 +795,11 @@ function editSlot(cid,p){
     var split=Object.keys(days).length>0;
     if(split) v.days=days;
     setCell(cid,p,v);
+    delete S.planLocks[cid+'|'+p];
     if(split||$('edL').checked) S.locks[cid+'|'+p]=true; else delete S.locks[cid+'|'+p];
     closeDlg(); render(); toast(split?'Weekday split saved and locked':'Period saved for every day');
   };
-  $('edDel').onclick=function(){ setCell(cid,p,null); delete S.locks[cid+'|'+p]; closeDlg(); render(); toast('Whole period cleared'); };
+  $('edDel').onclick=function(){ setCell(cid,p,null); delete S.locks[cid+'|'+p]; delete S.planLocks[cid+'|'+p]; closeDlg(); render(); toast('Whole period cleared'); };
 }
 
 /* ============================ view: teacher grid ============================ */
@@ -998,7 +1004,7 @@ function delTeacher(id){
   if(n) msg+='\n\nThey have '+n+' weekday assignment(s). Any slot using them will be emptied.';
   if(ct.length) msg+='\n\nThey are class teacher of '+ct.map(function(c){return c.name;}).join(', ')+'. That will be cleared.';
   if(!confirm(msg)) return;
-  Object.keys(S.tt).forEach(function(k){ if(entryUses(S.tt[k],'t',id)){ delete S.tt[k]; delete S.locks[k]; } });
+  Object.keys(S.tt).forEach(function(k){ if(entryUses(S.tt[k],'t',id)){ delete S.tt[k]; delete S.locks[k]; delete S.planLocks[k]; } });
   if(S.plan) Object.keys(S.plan).forEach(function(c){ S.plan[c]=S.plan[c].filter(function(r){return r.t!==id;}); });
   ct.forEach(function(c){ c.ct=''; });
   S.teachers=S.teachers.filter(function(t){ return t.id!==id; });
@@ -1018,7 +1024,7 @@ function classDlg(id){
     var n=$('cN').value.trim(); if(!n){ toast('Enter a class name'); return; }
     var np=Math.max(1,Math.min(NP(),+$('cP').value||NP()));
     if(id){ var o=C(id); o.name=n; o.ct=$('cT').value; o.periods=np;
-      for(var p=np+1;p<=NP();p++) setCell(id,p,null); }
+      for(var p=np+1;p<=NP();p++){ setCell(id,p,null); delete S.locks[id+'|'+p]; delete S.planLocks[id+'|'+p]; } }
     else S.classes.push({ id:uid('c'), name:n, ct:$('cT').value, periods:np });
     DIRTY=true; closeDlg(); render(); toast(id?'Class saved':'Class added');
   };
@@ -1026,7 +1032,7 @@ function classDlg(id){
 function delClass(id){
   var n=Object.keys(S.tt).filter(function(k){return k.split('|')[0]===id;}).length;
   if(!confirm('Remove class '+cname(id)+'? Its '+n+' period(s) will be deleted.')) return;
-  Object.keys(S.tt).forEach(function(k){ if(k.split('|')[0]===id){delete S.tt[k];delete S.locks[k];} });
+  Object.keys(S.tt).forEach(function(k){ if(k.split('|')[0]===id){delete S.tt[k];delete S.locks[k];delete S.planLocks[k];} });
   if(S.plan) delete S.plan[id];
   S.classes=S.classes.filter(function(c){ return c.id!==id; });
   DIRTY=true; render(); toast('Class removed');
@@ -1048,7 +1054,7 @@ function subjDlg(id){
 function delSubj(id){
   var n=assignmentUses('s',id);
   if(!confirm('Remove subject '+sname(id)+'?'+(n?'\n\nIt is used in '+n+' period(s), which will be emptied.':''))) return;
-  Object.keys(S.tt).forEach(function(k){ if(entryUses(S.tt[k],'s',id)){ delete S.tt[k]; delete S.locks[k]; } });
+  Object.keys(S.tt).forEach(function(k){ if(entryUses(S.tt[k],'s',id)){ delete S.tt[k]; delete S.locks[k]; delete S.planLocks[k]; } });
   if(S.plan) Object.keys(S.plan).forEach(function(c){ S.plan[c]=S.plan[c].filter(function(r){return r.s!==id;}); });
   S.subjects=S.subjects.filter(function(s){ return s.id!==id; });
   DIRTY=true; render(); toast('Subject removed');
@@ -1098,7 +1104,9 @@ function bindTime(){
       if(!confirm('Reducing to '+np+' periods will delete anything timetabled beyond P'+np+'. Continue?')) return;
       t.periods.length=np;
       S.classes.forEach(function(c){ if(c.periods>np) c.periods=np;
-        for(var p=np+1;p<=12;p++) setCell(c.id,p,null); });
+        for(var p=np+1;p<=12;p++){
+          setCell(c.id,p,null); delete S.locks[c.id+'|'+p]; delete S.planLocks[c.id+'|'+p];
+        } });
     }
     DIRTY=true; render(); toast('Timings saved');
   };
@@ -1111,23 +1119,33 @@ function bindTime(){
 /* ============================ view: auto-build ============================ */
 function currentReqs(){ return planFrom(S); }
 function PLAN(){ if(!S.plan) S.plan=currentReqs(); return S.plan; }
+function fixedPeriodOptions(c,selected){
+  selected=+selected||0;
+  var h='<option value="0"'+(!selected?' selected':'')+'>Any period</option>';
+  for(var p=1;p<=c.periods;p++) h+='<option value="'+p+'"'+(p===selected?' selected':'')+'>P'+p+'</option>';
+  if(selected>c.periods) h+='<option value="'+selected+'" selected>P'+selected+' — class does not run</option>';
+  return h;
+}
 function vGen(){
   var REQS=PLAN();
   S.classes.forEach(function(c){ if(!REQS[c.id]) REQS[c.id]=[]; });
   var h='<div class="phead"><div><h1>Auto-build</h1>'+ 
     '<div class="note">You decide which teacher takes which subject in each class, and how many periods a day. '+
     'Auto-build works out where in the day each one goes without creating a clash. '+
-    'The plan is saved with your data, so clearing the timetable does not lose it. New placements use the same lesson on every running weekday; locked weekday-split slots are preserved.</div></div></div>';
+    'Choose a fixed period when a lesson must stay in P1–P8. The plan and its fixed slots are saved online with your timetable.</div></div></div>';
   h+='<div class="bar"><button class="btn pri" id="genRun">Build timetable</button>'+
      '<button class="btn" id="genLoad">Reload plan from current timetable</button>'+
      '<button class="btn" id="genAddRow">Add a lesson</button>'+
-     '<span class="spacer"></span><span class="small muted">Locked periods are never moved</span></div>';
+     '<span class="spacer"></span><span class="small muted">Fixed and locked periods are never moved</span></div>';
   h+='<div id="genOut"></div>';
+  h+='<div class="banner ok"><b>Fixed period:</b> choose P1–P8 beside a lesson to pin one occurrence there. '+
+     'If the lesson has more than one period a day, the remaining occurrences are placed automatically. '+
+     'Use separate lesson rows when the same lesson needs more than one fixed period.</div>';
   h+='<div class="card"><h2>Lesson plan <span class="hint">what each class needs every day</span></h2><div class="tw"><table>'+
-     '<thead><tr><th>Class</th><th>Subject</th><th>Teacher</th><th class="num">Periods a day</th><th></th></tr></thead><tbody>';
+     '<thead><tr><th>Class</th><th>Subject</th><th>Teacher</th><th class="num">Periods a day</th><th>Fixed period</th><th></th></tr></thead><tbody>';
   S.classes.forEach(function(c){
     var rs=REQS[c.id]||[], tot=rs.reduce(function(a,r){ return a+r.n; },0);
-    var bad = tot>c.periods;
+    var fixed=rs.filter(function(r){return +r.p>0;}).length, bad = tot>c.periods;
     rs.forEach(function(r,i){
       h+='<tr><td>'+(i===0?'<b>'+esc(c.name)+'</b>':'')+'</td>'+
          '<td><select data-rc="'+c.id+'" data-ri="'+i+'" data-rf="s">'+S.subjects.map(function(s){
@@ -1135,10 +1153,12 @@ function vGen(){
          '<td><select data-rc="'+c.id+'" data-ri="'+i+'" data-rf="t">'+S.teachers.map(function(t){
             return '<option value="'+t.id+'"'+(t.id===r.t?' selected':'')+'>'+esc(t.name)+'</option>'; }).join('')+'</select></td>'+
          '<td class="num"><input type="number" min="1" max="'+NP()+'" value="'+r.n+'" style="width:60px" data-rc="'+c.id+'" data-ri="'+i+'" data-rf="n"></td>'+
+         '<td><select aria-label="Fixed period for '+esc(c.name)+'" data-rc="'+c.id+'" data-ri="'+i+'" data-rf="p">'+fixedPeriodOptions(c,r.p)+'</select></td>'+
          '<td><button class="btn sm" data-rdel="'+c.id+'" data-ri="'+i+'">Remove</button></td></tr>';
     });
     h+='<tr style="background:var(--wash)"><td></td><td colspan="2" class="small muted">'+esc(c.name)+
        ' needs '+c.periods+' periods a day</td><td class="num"><b '+(bad?'style="color:var(--seal)"':'')+'>'+tot+'</b></td>'+
+       '<td class="small">'+(fixed?'<span class="chip ok">'+fixed+' fixed</span>':'<span class="muted">none fixed</span>')+'</td>'+
        '<td>'+(bad?'<span class="chip bad">too many</span>':tot<c.periods?'<span class="chip warn">'+(c.periods-tot)+' short</span>':'<span class="chip ok">exact</span>')+'</td></tr>';
   });
   h+='</tbody></table></div></div>';
@@ -1156,18 +1176,21 @@ function bindGen(){
         return '<option value="'+s.id+'">'+esc(s.name)+'</option>'; }).join('')+'</select></label>'+
       '<label class="fld">Teacher<select id="nrT">'+S.teachers.map(function(t){
         return '<option value="'+t.id+'">'+esc(t.name)+'</option>'; }).join('')+'</select></label>'+
-      '<label class="fld">Periods a day<input type="number" id="nrN" min="1" max="'+NP()+'" value="1"></label>',
+      '<label class="fld">Periods a day<input type="number" id="nrN" min="1" max="'+NP()+'" value="1"></label>'+
+      '<label class="fld">Fixed period<select id="nrP"><option value="0">Any period</option>'+Array.from({length:NP()},function(_,i){
+        return '<option value="'+(i+1)+'">P'+(i+1)+'</option>'; }).join('')+'</select></label>'+
+      '<div class="small muted">A fixed period pins one occurrence. The selected class must run in that period.</div>',
       '<button class="btn" onclick="closeDlg()">Cancel</button><button class="btn pri" id="nrOk">Add lesson</button>');
     $('nrOk').onclick=function(){
       var c=$('nrC').value; if(!c){ toast('Pick a class'); return; }
-      var P=PLAN(); (P[c]=P[c]||[]).push({ s:$('nrS').value, t:$('nrT').value, n:+$('nrN').value||1 }); DIRTY=true;
+      var P=PLAN(); (P[c]=P[c]||[]).push({ s:$('nrS').value, t:$('nrT').value, n:+$('nrN').value||1, p:+$('nrP').value||0 }); DIRTY=true;
       closeDlg(); render(); toast('Lesson added to the plan');
     };
   };
   [].forEach.call(document.querySelectorAll('[data-rf]'), function(el){
     el.onchange=function(){
       var r=PLAN()[el.dataset.rc][+el.dataset.ri], f=el.dataset.rf;
-      r[f] = (f==='n') ? Math.max(1,+el.value||1) : el.value;
+      r[f] = f==='n' ? Math.max(1,+el.value||1) : f==='p' ? (+el.value||0) : el.value;
       DIRTY=true; render();
     };
   });
@@ -1177,19 +1200,74 @@ function bindGen(){
 }
 
 /* ---- the solver ---- */
+function autoBuildFixedState(REQS){
+  var fixed={}, manualLocks={}, planLocks={}, planned={}, problems=[], seen={}, fixedClashes={}, counts={}, runs={};
+  function problem(message){ if(problems.indexOf(message)<0) problems.push(message); }
+  Object.keys(S.locks||{}).forEach(function(k){
+    if((S.planLocks||{})[k]) return;
+    var a=k.split('|'), c=C(a[0]), p=+a[1], e=S.tt[k];
+    if(!c||!e||p<1||p>c.periods) return;
+    manualLocks[k]=true; fixed[k]=e;
+  });
+  S.classes.forEach(function(c){
+    (REQS[c.id]||[]).forEach(function(r){
+      var p=+r.p||0; if(!p) return;
+      var k=c.id+'|'+p;
+      if(p<1||p>c.periods){
+        problem(c.name+' does not run in P'+p+', so '+sname(r.s)+' cannot be fixed there'); return;
+      }
+      if(planned[k]){
+        problem(c.name+' has more than one lesson fixed in P'+p); return;
+      }
+      planned[k]=true;
+      if(fixed[k]&&(fixed[k].days||fixed[k].s!==r.s||fixed[k].t!==r.t)){
+        problem(c.name+' P'+p+' is already manually locked to '+sname(fixed[k].s)+' / '+tname(fixed[k].t)); return;
+      }
+      if(!fixed[k]){ fixed[k]={s:r.s,t:r.t}; planLocks[k]=true; }
+    });
+  });
+  Object.keys(fixed).forEach(function(k){
+    var a=k.split('|'), cid=a[0], p=+a[1];
+    runningDayIds(p).forEach(function(d){
+      var e=lessonOn(fixed[k],d); if(!e||!e.t) return;
+      var t=T(e.t), slot=d+'|'+e.t+'|'+p, dayTeacher=d+'|'+e.t;
+      if(t&&t.unavail.indexOf(p)>=0) problem(t.name+' cannot teach P'+p+', but '+cname(cid)+' is fixed there');
+      if(seen[slot]&&seen[slot]!==cid){
+        var pair=[seen[slot],cid].sort(), clashKey=e.t+'|'+pair.join('|')+'|'+p;
+        if(!fixedClashes[clashKey]){
+          problem(tname(e.t)+' is fixed in both '+cname(pair[0])+' and '+cname(pair[1])+' at P'+p);
+          fixedClashes[clashKey]=true;
+        }
+      }
+      seen[slot]=cid; counts[dayTeacher]=(counts[dayTeacher]||0)+1;
+      (runs[dayTeacher]=runs[dayTeacher]||{})[p]=true;
+    });
+  });
+  Object.keys(counts).forEach(function(k){
+    var a=k.split('|'), t=T(a[1]);
+    if(t&&counts[k]>(t.max||NP())) problem(t.name+' has '+counts[k]+' fixed periods on '+dayTitle(a[0])+' but the limit is '+(t.max||NP()));
+  });
+  Object.keys(runs).forEach(function(k){
+    var a=k.split('|'), longest=0, current=0;
+    for(var p=1;p<=NP();p++){ if(runs[k][p]){current++;longest=Math.max(longest,current);}else current=0; }
+    if(longest>S.rules.maxConsecutive) problem(tname(a[1])+' has '+longest+' fixed periods in a row on '+dayTitle(a[0]));
+  });
+  return {fixed:fixed,manualLocks:manualLocks,planLocks:planLocks,planned:planned,problems:problems};
+}
 function runSolver(){
   var np=NP(), out=$('genOut'), REQS=PLAN();
-  var lessons={}, problems=[];
+  var prep=autoBuildFixedState(REQS), lessons={}, problems=prep.problems.slice();
   S.classes.forEach(function(c){
     var rs=REQS[c.id]||[], arr=[];
     rs.forEach(function(r){ for(var i=0;i<r.n;i++) arr.push({ s:r.s, t:r.t }); });
-    // remove lessons already fixed by locked cells
+    // Remove one planned occurrence for every hard-fixed class slot.
+    var fixedCount=0;
     for(var p=1;p<=c.periods;p++){
-      if(!isLocked(c.id,p)) continue;
-      var e=cell(c.id,p); if(!e) continue;
+      var e=prep.fixed[c.id+'|'+p]; if(!e) continue;
+      fixedCount++;
       for(var i=0;i<arr.length;i++){ if(arr[i].s===e.s && arr[i].t===e.t){ arr.splice(i,1); break; } }
     }
-    if(arr.length > c.periods) problems.push(c.name+' asks for '+((REQS[c.id]||[]).reduce(function(s,r){return s+r.n;},0))+' periods but runs only '+c.periods);
+    if(arr.length>c.periods-fixedCount) problems.push(c.name+' has '+arr.length+' movable lessons but only '+(c.periods-fixedCount)+' open periods after its fixed slots');
     lessons[c.id]=arr;
   });
   if(problems.length){
@@ -1200,7 +1278,7 @@ function runSolver(){
 
   var slots=[];
   S.classes.forEach(function(c){
-    for(var p=1;p<=c.periods;p++) if(!isLocked(c.id,p)) slots.push({ c:c.id, p:p });
+    for(var p=1;p<=c.periods;p++) if(!prep.fixed[c.id+'|'+p]) slots.push({ c:c.id, p:p });
   });
   slots.sort(function(a,b){ return a.p-b.p || (a.c<b.c?-1:1); });
 
@@ -1209,12 +1287,12 @@ function runSolver(){
     if(Date.now()-t0 > 6000) break;
     var pool={}; Object.keys(lessons).forEach(function(k){ pool[k]=shuffle(lessons[k].slice()); });
     var order = r===0 ? slots.slice() : shuffle(slots.slice()).sort(function(a,b){ return a.p-b.p; });
-    var res=attempt(order, pool, np);
+    var res=attempt(order, pool, np, prep.fixed);
     if(res) best=res;
   }
 
   var anyLesson=Object.keys(lessons).some(function(k){ return lessons[k].length; });
-  if(!anyLesson && slots.length){
+  if(!anyLesson && slots.length && !Object.keys(prep.planned).length){
     out.innerHTML='<div class="banner warn"><b>The lesson plan is empty.</b> '+
       'Add lessons below, or choose "Reload plan from current timetable" if you still have a timetable to copy.</div>';
     return;
@@ -1225,27 +1303,31 @@ function runSolver(){
       'Try raising a teacher\u2019s period limit, relaxing the back-to-back rule on the timings page, or splitting a subject between two teachers.</div>';
     return;
   }
-  S.classes.forEach(function(c){ for(var p=1;p<=NP();p++) if(!isLocked(c.id,p)) setCell(c.id,p,null); });
+  S.classes.forEach(function(c){ for(var p=1;p<=NP();p++) if(!prep.fixed[c.id+'|'+p]) setCell(c.id,p,null); });
+  Object.keys(prep.fixed).forEach(function(k){ S.tt[k]=prep.fixed[k]; });
   Object.keys(best).forEach(function(k){ S.tt[k]=best[k]; });
+  S.locks={};
+  Object.keys(prep.manualLocks).forEach(function(k){ S.locks[k]=true; });
+  Object.keys(prep.planLocks).forEach(function(k){ S.locks[k]=true; });
+  S.planLocks=prep.planLocks;
   DIRTY=true;
   var nc=Object.keys(analyseWeek().clash).length;
   render();
   $('genOut').innerHTML='<div class="banner '+(nc?'bad':'ok')+'"><b>Timetable built.</b> '+
-    Object.keys(best).length+' periods placed, '+(nc?nc+' clash(es) remain — check locked cells.':'no clashes.')+
+    Object.keys(best).length+' flexible periods placed and '+Object.keys(prep.planned).length+' fixed period(s) kept, '+
+    (nc?nc+' clash(es) remain — check locked cells.':'no clashes.')+
     ' Open the class timetable to review, then print.</div>';
   toast('Timetable built');
 }
-function attempt(order, pool, np){
+function attempt(order, pool, np, fixed){
   var placed={}, busy={}, cnt={}, seq={};
-  S.classes.forEach(function(c){
-    for(var p=1;p<=NP();p++){
-      if(!isLocked(c.id,p)) continue;
-      runningDayIds(p).forEach(function(d){
-        var e=cell(c.id,p,d); if(!e) return;
+  Object.keys(fixed||{}).forEach(function(k){
+    var p=+k.split('|')[1];
+    runningDayIds(p).forEach(function(d){
+        var e=lessonOn(fixed[k],d); if(!e) return;
         var dk=d+'|'+e.t;
         busy[dk+'|'+p]=true; cnt[dk]=(cnt[dk]||0)+1; (seq[dk]=seq[dk]||{})[p]=true;
       });
-    }
   });
   var nodes=0;
   function runLen(k,p){
@@ -1976,7 +2058,7 @@ if($('fileIn')) $('fileIn').onchange=function(e){
     try{
       var o=JSON.parse(rd.result);
       if(!o.classes||!o.teachers||!o.timing) throw new Error('missing sections');
-      S=o; S.locks=S.locks||{}; S.rules=S.rules||{maxConsecutive:6,defaultMax:8};
+      S=o; S.locks=S.locks||{}; S.planLocks=S.planLocks||{}; S.rules=S.rules||{maxConsecutive:6,defaultMax:8};
       if(!S.plan) S.plan=planFrom(S);
       S.leave=S.leave||{}; S.cover=S.cover||{}; S.meta=S.meta||{};
       ensureTeacherOrder(S);
@@ -2055,6 +2137,7 @@ function vHelp(){
    '<li><b>Set teacher priority</b>In the Teachers table, drag rows into the required order. Existing data starts with EST teachers above PST teachers. The order saves online and is used on teacher screens, CSV files and PDFs.</li>'+
    '<li><b>Check the timings</b>Open <i>Period timings</i>. These times print on every sheet, so get them right first.</li>'+
    '<li><b>Fill the timetable</b>Open <i>Class timetable</i> and click any cell. Set the same lesson for every day, or give selected weekdays different subjects and teachers. Or use <i>Auto-build</i> to place the regular lessons at once.</li>'+ 
+   '<li><b>Fix required periods</b>In <i>Auto-build</i>, choose P1–P8 in the Fixed period column for any lesson that must stay in that slot. Choose Any period when Auto-build may place it freely.</li>'+
    '<li><b>Watch the Overview</b>It tells you about clashes, empty periods and teachers carrying too much or too little.</li>'+
    '<li><b>Print</b>Open <i>Print &amp; export</i> and download the required verified A4 PDF.</li>'+
    '<li><b>Save your work</b>Open <i>Cloud timetables</i>. Changes to an opened timetable save online automatically and create recoverable versions.</li>'+ 
@@ -2074,7 +2157,7 @@ function vHelp(){
    '</div></div>'+
    '<div class="card"><h2>If something looks wrong</h2><div class="body"><ul class="tight">'+
    '<li><b>A cell is red</b> — a teacher is booked in two classes at once on at least one weekday. Click it and check the status beside each weekday.</li>'+ 
-   '<li><b>Auto-build says it cannot find an arrangement</b> — usually a teacher is asked for more periods than the day holds. Raise their limit, relax the back-to-back rule, or split a subject between two teachers.</li>'+
+   '<li><b>Auto-build says it cannot find an arrangement</b> — check the fixed-period messages first. Otherwise a teacher may be asked for more periods than the day holds. Raise their limit, relax the back-to-back rule, or split a subject between two teachers.</li>'+
    '<li><b>A PDF cannot be generated</b> — confirm you are signed in and online, then retry the A4 PDF download.</li>'+
    '</ul></div></div>';
 }
@@ -2108,7 +2191,7 @@ function render(){
   var node=document.getElementById('stateData'), pre=null;
   try{ pre=JSON.parse(node.textContent); }catch(e){ pre=null; }
   if(pre && pre.classes && pre.teachers && pre.timing){
-    S=pre; S.locks=S.locks||{}; S.leave=S.leave||{}; S.cover=S.cover||{};
+    S=pre; S.locks=S.locks||{}; S.planLocks=S.planLocks||{}; S.leave=S.leave||{}; S.cover=S.cover||{};
     S.rules=S.rules||{maxConsecutive:6,defaultMax:8}; S.meta=S.meta||{};
     if(!S.plan) S.plan=planFrom(S);
   } else S=buildSeed();

@@ -59,6 +59,7 @@ function normalizeState(value) {
   state.meta ||= {};
   state.tt ||= {};
   state.locks ||= {};
+  state.planLocks ||= {};
   state.leave ||= {};
   state.cover ||= {};
   state.rules ||= { maxConsecutive: 6, defaultMax: 8 };
@@ -109,7 +110,7 @@ function parentRecord(name, state, includeCreated, versionCount) {
     effectiveFrom: state.meta?.wef || "",
     state,
     ownerUid: user.uid,
-    schemaVersion: 4,
+    schemaVersion: 5,
     versionCount,
     updatedAt: serverTimestamp(),
   };
@@ -285,6 +286,7 @@ async function newTimetableFromSetup() {
   const next = normalizeState(currentState());
   next.tt = {};
   next.locks = {};
+  next.planLocks = {};
   next.leave = {};
   next.cover = {};
   next.plan = {};
