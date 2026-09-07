@@ -62,6 +62,7 @@ function normalizeState(value) {
   state.planLocks ||= {};
   state.leave ||= {};
   state.cover ||= {};
+  state.coverExcluded ||= {};
   state.rules ||= { maxConsecutive: 6, defaultMax: 8 };
   if (!state.plan && typeof window.planFrom === "function") state.plan = window.planFrom(state);
   if (typeof window.ensureTeacherOrder === "function") window.ensureTeacherOrder(state);
@@ -110,7 +111,7 @@ function parentRecord(name, state, includeCreated, versionCount) {
     effectiveFrom: state.meta?.wef || "",
     state,
     ownerUid: user.uid,
-    schemaVersion: 5,
+    schemaVersion: 6,
     versionCount,
     updatedAt: serverTimestamp(),
   };
@@ -289,6 +290,7 @@ async function newTimetableFromSetup() {
   next.planLocks = {};
   next.leave = {};
   next.cover = {};
+  next.coverExcluded = {};
   next.plan = {};
   next.classes.forEach((schoolClass) => { next.plan[schoolClass.id] = []; });
   next.meta.wef = "";

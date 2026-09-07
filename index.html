@@ -388,7 +388,7 @@ function buildSeed(){
         {mt:'12:55 - 1:30', fri:''}
       ]
     },
-    teachers:[], classes:[], subjects:[], tt:{}, locks:{}, planLocks:{}, leave:{}, cover:{},
+    teachers:[], classes:[], subjects:[], tt:{}, locks:{}, planLocks:{}, leave:{}, cover:{}, coverExcluded:{},
     teacherOrderMode:'grouped', teacherOrderVersion:1,
     rules:{ maxConsecutive:6, defaultMax:8 }
   };
@@ -1066,6 +1066,10 @@ function delTeacher(id){
   if(!confirm(msg)) return;
   Object.keys(S.tt).forEach(function(k){ if(entryUses(S.tt[k],'t',id)){ delete S.tt[k]; delete S.locks[k]; delete S.planLocks[k]; } });
   if(S.plan) Object.keys(S.plan).forEach(function(c){ S.plan[c]=S.plan[c].filter(function(r){return r.t!==id;}); });
+  Object.keys(S.coverExcluded||{}).forEach(function(d){
+    S.coverExcluded[d]=S.coverExcluded[d].filter(function(tid){return tid!==id;});
+    if(!S.coverExcluded[d].length) delete S.coverExcluded[d];
+  });
   ct.forEach(function(c){ c.ct=''; });
   S.teachers=S.teachers.filter(function(t){ return t.id!==id; });
   DIRTY=true; render(); toast('Teacher removed');
@@ -1473,6 +1477,7 @@ function niceMonth(ym){
 }
 function leaveOf(d){ S.leave=S.leave||{}; return S.leave[d]||[]; }
 function coverOf(d){ S.cover=S.cover||{}; return S.cover[d]||(S.cover[d]={}); }
+function coverExcludedOf(d){ S.coverExcluded=S.coverExcluded||{}; return S.coverExcluded[d]||[]; }
 
 /* does this period run on this date? */
 function periodRuns(iso,p){
@@ -1512,9 +1517,10 @@ function lastCoverDate(tid){
 }
 /* who can take this period on this date */
 function coverCandidates(iso,p,skipKey){
-  var away=leaveOf(iso), day=coverOf(iso), an=analyse(dayCode(iso)||'mon');
+  var away=leaveOf(iso), excluded=coverExcludedOf(iso), day=coverOf(iso), an=analyse(dayCode(iso)||'mon');
   return S.teachers.filter(function(t){
     if(away.indexOf(t.id)>=0) return false;                        // on leave
+    if(excluded.indexOf(t.id)>=0) return false;                    // unavailable for extra cover today
     if((an.byTP[t.id+'|'+p]||[]).length) return false;             // already teaching
     if(t.unavail.indexOf(p)>=0) return false;                      // cannot take this period
     var clash=false;
@@ -1567,11 +1573,11 @@ function autoAssign(iso, opts, redoAll){
 
 /* ---------- view ---------- */
 function vCover(){
-  var away=leaveOf(CDATE), day=coverOf(CDATE), needs=coverNeeds(CDATE);
+  var away=leaveOf(CDATE), excluded=coverExcludedOf(CDATE), day=coverOf(CDATE), needs=coverNeeds(CDATE);
   var run=coverCounts('month',CDATE);
   var h='<div class="phead"><div><h1>Cover for leave</h1>'+
     '<div class="note">Mark who is absent, then let the portal share their periods among the teachers who are free — '+
-    'giving the next turn to whoever has done the fewest so far.</div></div></div>';
+    'giving the next turn to whoever has done the fewest so far. You can also exclude teachers who should not receive extra cover on the selected date.</div></div></div>';
 
   h+='<div class="card"><h2>Day</h2><div class="body rowflex">'+
      '<label class="fld">Date<input type="date" id="cvDate" value="'+CDATE+'"></label>'+
@@ -1586,6 +1592,17 @@ function vCover(){
     h+='<label'+(away.indexOf(t.id)>=0?' style="background:var(--seal-bg);border-color:var(--seal)"':'')+'>'+
        '<input type="checkbox" class="lv" value="'+t.id+'"'+(away.indexOf(t.id)>=0?' checked':'')+'> '+
        esc(t.name)+' <span class="muted">'+n+'p</span></label>';
+  });
+  h+='</div></div></div>';
+
+  h+='<div class="card"><h2>Do not assign cover today <span class="hint">'+excluded.length+' selected for '+niceDate(CDATE)+'</span>'+
+     (excluded.length?'<span class="spacer"></span><button class="btn sm" id="cvExClear">Clear selection</button>':'')+'</h2>'+
+     '<div class="body"><div class="small muted" style="margin-bottom:8px">Select any teacher who is available for normal teaching but should not receive an extra/alternative period on this date.</div><div class="pill">';
+  S.teachers.forEach(function(t){
+    var isAway=away.indexOf(t.id)>=0, isExcluded=excluded.indexOf(t.id)>=0;
+    h+='<label'+(isExcluded?' style="background:var(--amber-bg);border-color:var(--amber)"':isAway?' style="opacity:.55"':'')+'>'+
+       '<input type="checkbox" class="cvex" value="'+t.id+'"'+(isExcluded?' checked':'')+(isAway?' disabled':'')+'> '+
+       esc(t.name)+(isAway?' <span class="muted">(on leave)</span>':'')+'</label>';
   });
   h+='</div></div></div>';
 
@@ -1622,7 +1639,8 @@ function vCover(){
       return '<option value="'+t.id+'"'+(t.id===cur?' selected':'')+'>'+esc(t.name)+
              '  ('+(run[t.id]||0)+' this month)</option>'; }).join('');
     if(cur && !cand.some(function(t){ return t.id===cur; }))
-      opts='<option value="'+cur+'" selected>'+esc(tname(cur))+' (already busy)</option>'+opts;
+      opts='<option value="'+cur+'" selected>'+esc(tname(cur))+
+        (excluded.indexOf(cur)>=0?' (not available for cover today)':' (already busy)')+'</option>'+opts;
     h+='<tr><td><b>P'+n.p+'</b></td><td class="small muted">'+
        esc(isFriday(CDATE)?(S.timing.periods[n.p-1].fri||'—'):S.timing.periods[n.p-1].mt)+'</td>'+
        '<td><b>'+esc(cname(n.c))+'</b></td><td>'+esc(sname(n.s))+'</td>'+
@@ -1633,7 +1651,7 @@ function vCover(){
   h+='</tbody></table></div>';
   if(needs.length && assigned<needs.length)
     h+='<div class="body"><div class="banner warn" style="margin:0">'+(needs.length-assigned)+
-       ' period(s) have nobody free. Consider merging the class with another, or raising the daily cover limit above.</div></div>';
+       ' period(s) have nobody eligible. Review the unavailable list, merge the class with another, or raise the daily cover limit above.</div></div>';
   h+='</div>';
 
   var td={}; Object.keys(day).forEach(function(k){ if(day[k]) td[day[k]]=(td[day[k]]||0)+1; });
@@ -1694,12 +1712,28 @@ function bindCover(){
       S.leave=S.leave||{};
       var arr=[].map.call(document.querySelectorAll('.lv:checked'), function(x){ return x.value; });
       if(arr.length) S.leave[CDATE]=arr; else { delete S.leave[CDATE]; delete S.cover[CDATE]; }
+      var excluded=coverExcludedOf(CDATE).filter(function(tid){ return arr.indexOf(tid)<0; });
+      if(excluded.length) S.coverExcluded[CDATE]=excluded; else delete S.coverExcluded[CDATE];
       // drop cover rows whose lesson no longer needs covering
       var day=coverOf(CDATE), keep={}; coverNeeds(CDATE).forEach(function(n){ keep[n.c+'|'+n.p]=1; });
-      Object.keys(day).forEach(function(k){ if(!keep[k]) delete day[k]; });
+      Object.keys(day).forEach(function(k){ if(!keep[k] || arr.indexOf(day[k])>=0) delete day[k]; });
       DIRTY=true; render();
     };
   });
+  [].forEach.call(document.querySelectorAll('.cvex'), function(cb){
+    cb.onchange=function(){
+      S.coverExcluded=S.coverExcluded||{};
+      var arr=[].map.call(document.querySelectorAll('.cvex:checked:not(:disabled)'), function(x){ return x.value; });
+      if(arr.length) S.coverExcluded[CDATE]=arr; else delete S.coverExcluded[CDATE];
+      var day=coverOf(CDATE);
+      Object.keys(day).forEach(function(k){ if(arr.indexOf(day[k])>=0) delete day[k]; });
+      DIRTY=true; render(); toast('Cover availability saved for '+niceDate(CDATE));
+    };
+  });
+  if($('cvExClear')) $('cvExClear').onclick=function(){
+    delete S.coverExcluded[CDATE];
+    DIRTY=true; render(); toast('Every available teacher may now receive cover');
+  };
   function opts(){ return { basis:$('cvBasis')?$('cvBasis').value:'month',
     maxDay:$('cvMax')?(+$('cvMax').value||2):2, sameClass:$('cvSame')?$('cvSame').checked:false }; }
   if($('cvAuto')) $('cvAuto').onclick=function(){ var r=autoAssign(CDATE,opts(),false); render(); showCv(r); };
@@ -1713,6 +1747,9 @@ function bindCover(){
   if($('cvMonth')) $('cvMonth').onchange=function(){ CMONTH=this.value; render(); };
   [].forEach.call(document.querySelectorAll('[data-cv]'), function(sel){
     sel.onchange=function(){
+      if(this.value && coverExcludedOf(CDATE).indexOf(this.value)>=0){
+        toast('That teacher is not available for cover on this date'); render(); return;
+      }
       var day=coverOf(CDATE);
       if(this.value) day[this.dataset.cv]=this.value; else delete day[this.dataset.cv];
       DIRTY=true; render();
@@ -1723,19 +1760,21 @@ function showCv(r){
   var el=$('cvMsg'); if(!el) return;
   var cls = r.missed ? 'warn' : 'ok';
   el.innerHTML='<div class="banner '+cls+'"><b>'+r.placed+' period(s) assigned.</b>'+
-    (r.missed? ' '+r.missed+' could not be filled — nobody was free.' : ' Everything is covered.')+
+    (r.missed? ' '+r.missed+' could not be filled — nobody was eligible and available.' : ' Everything is covered.')+
     (r.relaxed? ' '+r.relaxed+' went to a teacher already at the daily cover limit.' : '')+'</div>';
   toast(r.placed+' assigned');
 }
 
 /* ---------- printable forms ---------- */
 function pCoverDay(){
-  var iso=CDATE, away=leaveOf(iso), needs=coverNeeds(iso), day=coverOf(iso);
+  var iso=CDATE, away=leaveOf(iso), excluded=coverExcludedOf(iso), needs=coverNeeds(iso), day=coverOf(iso);
   var h='<div class="psheet pp"><div class="psub">ALTERNATIVE PERIOD ORDER</div>'+
     '<div class="pbig cover-title">'+esc(dayName(iso))+', '+esc(niceDate(iso))+'</div>'+
     '<div class="pinfo">'+esc(S.meta.school)+'   |   Headmaster '+esc(S.meta.head)+'</div>';
   h+='<div class="pinfo top-gap">'+
      'On leave today: '+(away.length? away.map(tname).map(esc).join(',   ') : 'nobody')+'</div>';
+  h+='<div class="pinfo">Not available for extra cover: '+
+     (excluded.length? excluded.map(tname).map(esc).join(',   ') : 'nobody')+'</div>';
   if(!needs.length){
     h+='<div class="psum">No periods need cover on this day.</div></div>';
     return h;
@@ -1761,7 +1800,7 @@ function pCoverDay(){
   h+='<div class="psign split-signatures">'+
      '<div>Teachers informed by: ____________________</div>'+
      '<div>Headmaster: ____________________</div></div>';
-  h+='<div class="pfoot">Alternative periods are shared out so that no teacher carries more than their turn.</div></div>';
+  h+='<div class="pfoot">Alternative periods are shared fairly after respecting today\'s unavailable-teacher list.</div></div>';
   return h;
 }
 function pCoverMonth(){
@@ -2122,6 +2161,13 @@ function exportCoverCsv(){
                  S.cover[d][n.c+'|'+n.p]? tname(S.cover[d][n.c+'|'+n.p]) : 'not covered']);
     });
   });
+  var excludedDates=Object.keys(S.coverExcluded||{}).filter(function(d){
+    return d.slice(0,7)===CMONTH && coverExcludedOf(d).length;
+  }).sort();
+  if(excludedDates.length){
+    rows.push([]); rows.push(['Date','Teachers not available for alternative periods']);
+    excludedDates.forEach(function(d){ rows.push([d,coverExcludedOf(d).map(tname).join(', ')]); });
+  }
   var run=coverCounts('month',CMONTH+'-01');
   rows.push([]); rows.push(['Teacher','Designation','Alternative periods in '+niceMonth(CMONTH)]);
   S.teachers.forEach(function(t){ rows.push([t.name,t.desig,run[t.id]||0]); });
@@ -2144,7 +2190,7 @@ if($('fileIn')) $('fileIn').onchange=function(e){
       if(!o.classes||!o.teachers||!o.timing) throw new Error('missing sections');
       S=o; S.locks=S.locks||{}; S.planLocks=S.planLocks||{}; S.rules=S.rules||{maxConsecutive:6,defaultMax:8};
       if(!S.plan) S.plan=planFrom(S);
-      S.leave=S.leave||{}; S.cover=S.cover||{}; S.meta=S.meta||{};
+      S.leave=S.leave||{}; S.cover=S.cover||{}; S.coverExcluded=S.coverExcluded||{}; S.meta=S.meta||{};
       ensureTeacherOrder(S);
       applyTheme(S.meta.theme||'classic');
       DIRTY=false; render(); toast('Data file opened');
@@ -2237,8 +2283,9 @@ function vHelp(){
    '</ul></div></div>'+
    '<div class="card"><h2>Cover for leave</h2><div class="body">'+
    'Tick who is absent, and the portal shares their periods among the teachers who are actually free. '+
+   'For any chosen date, use <b>Do not assign cover today</b> to exclude a specific teacher from automatic and manual alternative periods. '+
    'It gives the next turn to whoever has done the fewest so far, then to whoever covered longest ago, so the load rotates. '+
-   'Print the day\u2019s order for the noticeboard, and the monthly statement for your record.'+
+   'The exclusions save online with the timetable and appear on the printed daily order and monthly CSV.'+
    '</div></div>'+
    '<div class="card"><h2>If something looks wrong</h2><div class="body"><ul class="tight">'+
    '<li><b>A cell is red</b> — a teacher is booked in two classes at once on at least one weekday. Click it and check the status beside each weekday.</li>'+ 
@@ -2276,7 +2323,7 @@ function render(){
   var node=document.getElementById('stateData'), pre=null;
   try{ pre=JSON.parse(node.textContent); }catch(e){ pre=null; }
   if(pre && pre.classes && pre.teachers && pre.timing){
-    S=pre; S.locks=S.locks||{}; S.planLocks=S.planLocks||{}; S.leave=S.leave||{}; S.cover=S.cover||{};
+    S=pre; S.locks=S.locks||{}; S.planLocks=S.planLocks||{}; S.leave=S.leave||{}; S.cover=S.cover||{}; S.coverExcluded=S.coverExcluded||{};
     S.rules=S.rules||{maxConsecutive:6,defaultMax:8}; S.meta=S.meta||{};
     if(!S.plan) S.plan=planFrom(S);
   } else S=buildSeed();

@@ -11,6 +11,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "qa:auto-build": "node scripts/auto-build-qa.mjs",
+    "qa:cover": "node scripts/cover-qa.mjs",
     "qa:pdf": "node scripts/pdf-qa.mjs"
   },
   "dependencies": {
