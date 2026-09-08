@@ -10,6 +10,8 @@ When an older saved timetable has class lessons but a missing or empty Auto-buil
 
 Failed Auto-build attempts include an actionable diagnostic report: exact plan errors, the deepest blocked class and period, rejected lessons and rules, teacher demand/capacity pressure, and suggested corrections.
 
+Auto-build has no back-to-back or consecutive-period limit. A teacher may teach consecutive periods whenever the timetable requires it. The optional **Most periods a day** value remains in each teacher record; set it to the full number of periods in the school day to impose no extra daily limit.
+
 The hosted app starts from `index.html`. Its working timetable data is stored in Firebase rather than browser downloads.
 
 ## Run locally

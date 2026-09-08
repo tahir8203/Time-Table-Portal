@@ -391,7 +391,7 @@ function buildSeed(){
     teachers:[], classes:[], subjects:[], tt:{}, locks:{}, planLocks:{}, leave:{}, cover:{}, coverExcluded:{},
     planCatalogVersion:2,
     teacherOrderMode:'grouped', teacherOrderVersion:1,
-    rules:{ maxConsecutive:6, defaultMax:8 }
+    rules:{ maxConsecutive:0, defaultMax:8 }
   };
   var tmap={}, smap={}, cmap={};
   SEED.teachers.forEach(function(t){
@@ -685,7 +685,6 @@ function vDash(){
   S.classes.forEach(function(c){ for(var p=1;p<=c.periods;p++) if(dayPeriodRuns(VIEWDAY,p)){ slots++; if(cell(c.id,p,VIEWDAY)) filled++; } });
   var over=S.teachers.filter(function(t){ return (a.load[t.id]||0) > (t.max||8); });
   var idle=S.teachers.filter(function(t){ return (a.load[t.id]||0)===0; });
-  var long=S.teachers.filter(function(t){ return runsFor(t.id,VIEWDAY).longest > S.rules.maxConsecutive; });
   var loads=S.teachers.map(function(t){ return a.load[t.id]||0; });
   var sched=loads.filter(function(x){return x>0;});
   var spread = sched.length ? Math.max.apply(null,sched)-Math.min.apply(null,sched) : 0;
@@ -717,7 +716,6 @@ function vDash(){
     var ctOf=S.classes.filter(function(c){ return c.ct===t.id; }).map(function(c){ return c.name; }).join(', ')||'—';
     var chip = n===0 ? '<span class="chip mute">unassigned</span>'
       : n>(t.max||8) ? '<span class="chip bad">over limit</span>'
-      : r.longest>S.rules.maxConsecutive ? '<span class="chip warn">'+r.longest+' in a row</span>'
       : n<=2 ? '<span class="chip warn">very light</span>'
       : '<span class="chip ok">ok</span>';
     h+='<tr><td><b>'+esc(t.name)+'</b></td><td class="small muted">'+esc(t.desig)+'</td><td class="small">'+esc(ctOf)+
@@ -726,10 +724,9 @@ function vDash(){
   });
   h+='</tbody></table></div></div>';
 
-  if(over.length||idle.length||long.length||nRepeat){
+  if(over.length||idle.length||nRepeat){
     h+='<div class="card"><h2>Worth a look</h2><div class="body"><ul class="tight">';
     over.forEach(function(t){ h+='<li><b>'+esc(t.name)+'</b> has '+(a.load[t.id])+' periods, above the limit of '+(t.max||8)+' set for them.</li>'; });
-    long.forEach(function(t){ h+='<li><b>'+esc(t.name)+'</b> teaches '+runsFor(t.id,VIEWDAY).longest+' periods back to back with no gap.</li>'; });
     idle.forEach(function(t){ h+='<li><b>'+esc(t.name)+'</b> has no periods and is free all day — available for cover.</li>'; });
     repeats.issues.forEach(function(issue){ h+='<li><b>'+esc(cname(issue.c))+'</b> repeats '+esc(sname(issue.s))+' in '+issue.periods.map(function(p){return 'P'+p;}).join(' and ')+'.</li>'; });
     h+='</ul></div></div>';
@@ -1064,6 +1061,7 @@ function teacherDlg(id){
     '<label class="fld">Name<input type="text" id="tN" value="'+esc(t.name)+'" placeholder="e.g. SIR ARSHAD"></label>'+
     '<label class="fld">Designation<input type="text" id="tD" value="'+esc(t.desig)+'" placeholder="e.g. EST (Arts)"></label>'+
     '<label class="fld">Most periods a day<input type="number" id="tM" min="0" max="'+NP()+'" value="'+(t.max||8)+'"></label>'+
+    '<div class="small muted">Set Most periods a day to '+NP()+' when this teacher should have no extra daily limit.</div>'+
     '<div><div class="small muted" style="margin-bottom:5px">Tick any period this teacher cannot take</div><div class="pill">'+pills+'</div></div>',
     '<button class="btn" onclick="closeDlg()">Cancel</button><button class="btn pri" id="tOk">'+(id?'Save teacher':'Add teacher')+'</button>');
   $('tOk').onclick=function(){
@@ -1172,10 +1170,9 @@ function vTime(){
      '<label class="fld">Periods in a day<input type="number" id="npIn" min="1" max="12" value="'+NP()+'"></label>'+
      '<button class="btn pri" id="tmSave">Save timings</button>'+
      '<span class="small muted">Leave a Friday box empty when that period does not run on Friday.</span></div></div>';
-  h+='<div class="card"><h2>Rules used by Auto-build</h2><div class="body rowflex">'+
-     '<label class="fld">Most periods in a row for one teacher<input type="number" id="rCon" min="1" max="12" value="'+S.rules.maxConsecutive+'"></label>'+
+  h+='<div class="card"><h2>Defaults used by Auto-build</h2><div class="body rowflex">'+
      '<label class="fld">Default period limit for a new teacher<input type="number" id="rMax" min="1" max="12" value="'+S.rules.defaultMax+'"></label>'+
-     '<button class="btn" id="rSave">Save rules</button></div></div>';
+     '<button class="btn" id="rSave">Save default</button><span class="small muted">There is no back-to-back or consecutive-period restriction.</span></div></div>';
   return h;
 }
 function bindTime(){
@@ -1199,8 +1196,8 @@ function bindTime(){
     DIRTY=true; render(); toast('Timings saved');
   };
   $('rSave').onclick=function(){
-    S.rules.maxConsecutive=+$('rCon').value||6; S.rules.defaultMax=+$('rMax').value||8;
-    DIRTY=true; render(); toast('Rules saved');
+    S.rules.maxConsecutive=0; S.rules.defaultMax=+$('rMax').value||8;
+    DIRTY=true; render(); toast('Default saved — consecutive periods are unlimited');
   };
 }
 
@@ -1361,14 +1358,14 @@ function autoBuildFailureHtml(REQS,trace,timedOut){
   h+='<h3 style="margin:14px 0 6px">How to rectify it</h3><ol class="tight">'+
     '<li>Start with the blocked class and teacher named above; reduce or reassign one planned lesson.</li>'+
     '<li>Check that teacher\'s <b>Most periods a day</b> and <b>Cannot teach in</b> settings.</li>'+
-    '<li>If the reason says back-to-back limit, raise <b>Most periods in a row</b> under Period timings.</li>'+
+    '<li>Review any <b>Cannot teach in</b> periods named in the report and remove those restrictions if they are unnecessary.</li>'+
     '<li>Use a fixed period only where necessary; too many fixed or locked cells remove the remaining choices.</li>'+
     '</ol>'+(timedOut?'<div class="small muted" style="margin-top:8px">The six-second search limit was reached. Correct the tightest items above and try again.</div>':'')+
     '</div></div>';
   return h;
 }
 function autoBuildFixedState(REQS){
-  var fixed={}, manualLocks={}, planLocks={}, planned={}, problems=[], seen={}, fixedClashes={}, fixedSubjects={}, fixedSubjectClashes={}, counts={}, runs={};
+  var fixed={}, manualLocks={}, planLocks={}, planned={}, problems=[], seen={}, fixedClashes={}, fixedSubjects={}, fixedSubjectClashes={}, counts={};
   function problem(message){ if(problems.indexOf(message)<0) problems.push(message); }
   Object.keys(S.locks||{}).forEach(function(k){
     if((S.planLocks||{})[k]) return;
@@ -1407,7 +1404,6 @@ function autoBuildFixedState(REQS){
         }
       }
       seen[slot]=cid; counts[dayTeacher]=(counts[dayTeacher]||0)+1;
-      (runs[dayTeacher]=runs[dayTeacher]||{})[p]=true;
       if(upperClassNoRepeat(c)&&e.s){
         var subjectKey=d+'|'+cid+'|'+e.s, other=fixedSubjects[subjectKey];
         if(other&&other!==p){
@@ -1424,11 +1420,6 @@ function autoBuildFixedState(REQS){
   Object.keys(counts).forEach(function(k){
     var a=k.split('|'), t=T(a[1]);
     if(t&&counts[k]>(t.max||NP())) problem(t.name+' has '+counts[k]+' fixed periods on '+dayTitle(a[0])+' but the limit is '+(t.max||NP()));
-  });
-  Object.keys(runs).forEach(function(k){
-    var a=k.split('|'), longest=0, current=0;
-    for(var p=1;p<=NP();p++){ if(runs[k][p]){current++;longest=Math.max(longest,current);}else current=0; }
-    if(longest>S.rules.maxConsecutive) problem(tname(a[1])+' has '+longest+' fixed periods in a row on '+dayTitle(a[0]));
   });
   return {fixed:fixed,manualLocks:manualLocks,planLocks:planLocks,planned:planned,problems:problems};
 }
@@ -1506,23 +1497,18 @@ function runSolver(){
   toast('Timetable built');
 }
 function attempt(order, pool, np, fixed, trace){
-  var placed={}, busy={}, busyOwner=trace?{}:null, cnt={}, seq={}, usedSubjects={};
+  var placed={}, busy={}, busyOwner=trace?{}:null, cnt={}, usedSubjects={};
   Object.keys(fixed||{}).forEach(function(k){
     var parts=k.split('|'), cid=parts[0], p=+parts[1];
     runningDayIds(p).forEach(function(d){
         var e=lessonOn(fixed[k],d); if(!e) return;
         var dk=d+'|'+e.t;
         busy[dk+'|'+p]=true; if(busyOwner) busyOwner[dk+'|'+p]=cid;
-        cnt[dk]=(cnt[dk]||0)+1; (seq[dk]=seq[dk]||{})[p]=true;
+        cnt[dk]=(cnt[dk]||0)+1;
         if(upperClassNoRepeat(C(cid))&&e.s) usedSubjects[d+'|'+cid+'|'+e.s]=true;
       });
   });
   var nodes=0;
-  function runLen(k,p){
-    var n=1,q=p-1; while(seq[k]&&seq[k][q]){ n++; q--; }
-    q=p+1; while(seq[k]&&seq[k][q]){ n++; q++; }
-    return n;
-  }
   function bt(i){
     if(++nodes>200000) return false;
     if(i>=order.length) return true;
@@ -1532,7 +1518,7 @@ function attempt(order, pool, np, fixed, trace){
     for(var j=0;j<arr.length;j++){
       var L=arr[j], key=L.s+'>'+L.t;
       if(tried[key]) continue; tried[key]=true;
-      var tt=T(L.t), reasons=[], busyDays={}, limitDays=[], consecutiveDays=[], repeatDays=[];
+      var tt=T(L.t), reasons=[], busyDays={}, limitDays=[], repeatDays=[];
       if(tt && tt.unavail.indexOf(sl.p)>=0){
         if(trace) rejected.push({s:L.s,t:L.t,reasons:[tt.name+' is marked unavailable in P'+sl.p]});
         continue;
@@ -1543,13 +1529,11 @@ function attempt(order, pool, np, fixed, trace){
         var dk=d+'|'+L.t;
         if(busy[dk+'|'+sl.p]){ ok=false; if(trace){ var owner=busyOwner[dk+'|'+sl.p]||''; (busyDays[owner]=busyDays[owner]||[]).push(d); } }
         if((cnt[dk]||0)>=(tt?(tt.max||np):np)){ ok=false; if(trace) limitDays.push(d); }
-        if(runLen(dk,sl.p)>S.rules.maxConsecutive){ ok=false; if(trace) consecutiveDays.push(d); }
         if(noRepeat&&usedSubjects[d+'|'+sl.c+'|'+L.s]){ ok=false; if(trace) repeatDays.push(d); }
       });
       if(trace){
         Object.keys(busyDays).forEach(function(owner){ reasons.push(tname(L.t)+' already teaches '+cname(owner)+' in P'+sl.p+' on '+dayLabel(busyDays[owner])); });
         if(limitDays.length) reasons.push(tname(L.t)+' reaches the daily period limit on '+dayLabel(limitDays));
-        if(consecutiveDays.length) reasons.push(tname(L.t)+' would exceed the '+S.rules.maxConsecutive+'-period back-to-back limit on '+dayLabel(consecutiveDays));
         if(repeatDays.length) reasons.push(cname(sl.c)+' already has '+sname(L.s)+' on '+dayLabel(repeatDays));
       }
       if(trace&&reasons.length){
@@ -1557,14 +1541,14 @@ function attempt(order, pool, np, fixed, trace){
         rejected.push({s:L.s,t:L.t,reasons:reasons});
       }
       if(!ok) continue;
-      days.forEach(function(d){ var dk=d+'|'+L.t; busy[dk+'|'+sl.p]=true; if(busyOwner) busyOwner[dk+'|'+sl.p]=sl.c; cnt[dk]=(cnt[dk]||0)+1; (seq[dk]=seq[dk]||{})[sl.p]=true;
+      days.forEach(function(d){ var dk=d+'|'+L.t; busy[dk+'|'+sl.p]=true; if(busyOwner) busyOwner[dk+'|'+sl.p]=sl.c; cnt[dk]=(cnt[dk]||0)+1;
         if(noRepeat) usedSubjects[d+'|'+sl.c+'|'+L.s]=true; });
       placed[sl.c+'|'+sl.p]={ s:L.s, t:L.t };
       arr.splice(j,1);
       if(bt(i+1)) return true;
       arr.splice(j,0,L);
       delete placed[sl.c+'|'+sl.p];
-      days.forEach(function(d){ var dk=d+'|'+L.t; delete busy[dk+'|'+sl.p]; if(busyOwner) delete busyOwner[dk+'|'+sl.p]; cnt[dk]--; delete seq[dk][sl.p];
+      days.forEach(function(d){ var dk=d+'|'+L.t; delete busy[dk+'|'+sl.p]; if(busyOwner) delete busyOwner[dk+'|'+sl.p]; cnt[dk]--;
         if(noRepeat) delete usedSubjects[d+'|'+sl.c+'|'+L.s]; });
     }
     if(trace&&i>=trace.depth){
@@ -2313,7 +2297,7 @@ if($('fileIn')) $('fileIn').onchange=function(e){
     try{
       var o=JSON.parse(rd.result);
       if(!o.classes||!o.teachers||!o.timing) throw new Error('missing sections');
-      S=o; S.locks=S.locks||{}; S.planLocks=S.planLocks||{}; S.rules=S.rules||{maxConsecutive:6,defaultMax:8};
+      S=o; S.locks=S.locks||{}; S.planLocks=S.planLocks||{}; S.rules=S.rules||{maxConsecutive:0,defaultMax:8}; S.rules.maxConsecutive=0;
       S.leave=S.leave||{}; S.cover=S.cover||{}; S.coverExcluded=S.coverExcluded||{}; S.meta=S.meta||{};
       ensureCatalogSync(S);
       ensureTeacherOrder(S);
@@ -2450,7 +2434,7 @@ function render(){
   try{ pre=JSON.parse(node.textContent); }catch(e){ pre=null; }
   if(pre && pre.classes && pre.teachers && pre.timing){
     S=pre; S.locks=S.locks||{}; S.planLocks=S.planLocks||{}; S.leave=S.leave||{}; S.cover=S.cover||{}; S.coverExcluded=S.coverExcluded||{};
-    S.rules=S.rules||{maxConsecutive:6,defaultMax:8}; S.meta=S.meta||{};
+    S.rules=S.rules||{maxConsecutive:0,defaultMax:8}; S.rules.maxConsecutive=0; S.meta=S.meta||{};
   } else S=buildSeed();
   ensureCatalogSync(S);
   ensureTeacherOrder(S);

@@ -111,28 +111,44 @@ try {
     success.teacherCapacityExplained = exactError.includes("ONE is assigned 2 planned periods")
       && exactError.includes("daily limit 1") && exactError.includes("exact errors");
 
+    S.classes = [{ id: "c1", name: "5th", ct: "", periods: 2 }];
+    S.teachers[0].max = 2;
+    S.plan = { c1: [
+      { s: "s1", t: "t1", n: 1, p: 0 },
+      { s: "s2", t: "t1", n: 1, p: 0 },
+    ] };
+    S.rules.maxConsecutive = 1;
+    S.tt = {}; S.locks = {}; S.planLocks = {};
+    render();
+    runSolver();
+    success.backToBackRestrictionRemoved = Boolean(cell("c1", 1) && cell("c1", 2));
+
     S.classes = [
       { id: "c1", name: "5th A", ct: "", periods: 2 },
       { id: "c2", name: "5th B", ct: "", periods: 2 },
     ];
-    S.teachers[0].max = 2;
+    S.teachers = [
+      { id: "t1", name: "ONE", desig: "EST", max: 2, unavail: [2] },
+      { id: "t2", name: "TWO", desig: "PST", max: 2, unavail: [2] },
+      { id: "t3", name: "THREE", desig: "PST", max: 2, unavail: [] },
+    ];
     S.plan = {
       c1: [
         { s: "s1", t: "t1", n: 1, p: 0 },
-        { s: "s2", t: "t2", n: 1, p: 0 },
+        { s: "s2", t: "t3", n: 1, p: 0 },
       ],
       c2: [
-        { s: "s2", t: "t1", n: 1, p: 0 },
-        { s: "s1", t: "t2", n: 1, p: 0 },
+        { s: "s2", t: "t2", n: 1, p: 0 },
+        { s: "s1", t: "t3", n: 1, p: 0 },
       ],
     };
-    S.rules.maxConsecutive = 1;
+    S.rules.maxConsecutive = 0;
     S.tt = {}; S.locks = {}; S.planLocks = {};
     render();
     runSolver();
     const searchError = document.getElementById("genOut").textContent;
     success.searchFailureNamesBlockedSlot = searchError.includes("Where Auto-build gets stuck")
-      && searchError.includes("back-to-back limit");
+      && (searchError.includes("marked unavailable") || searchError.includes("already teaches"));
     success.searchFailureShowsPressure = searchError.includes("Teachers under the most pressure")
       && searchError.includes("no spare slot") && searchError.includes("How to rectify it");
     return success;
@@ -144,7 +160,7 @@ try {
       || !result.manualDuplicateBlocked || !result.existingDuplicatesHighlighted
       || !result.printedDuplicatesOutlined || !result.lowerClassAllowed
       || !result.teacherCapacityExplained || !result.searchFailureNamesBlockedSlot
-      || !result.searchFailureShowsPressure) {
+      || !result.searchFailureShowsPressure || !result.backToBackRestrictionRemoved) {
     throw new Error(`Fixed-period Auto-build QA failed: ${JSON.stringify(result)}`);
   }
   if (process.env.QA_SCREENSHOT) {
