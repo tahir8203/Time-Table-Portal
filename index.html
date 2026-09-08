@@ -432,6 +432,19 @@ function planFrom(st){
   return m;
 }
 
+/* Keep every class represented in the saved Auto-build plan. All screens and
+   print forms use the same teacher, class and subject arrays directly. */
+function ensureCatalogSync(st){
+  st.teachers=Array.isArray(st.teachers)?st.teachers:[];
+  st.classes=Array.isArray(st.classes)?st.classes:[];
+  st.subjects=Array.isArray(st.subjects)?st.subjects:[];
+  if(!st.plan) st.plan=planFrom(st);
+  var live={};
+  st.classes.forEach(function(c){ live[c.id]=true; if(!Array.isArray(st.plan[c.id])) st.plan[c.id]=[]; });
+  Object.keys(st.plan).forEach(function(cid){ if(!live[cid]) delete st.plan[cid]; });
+  return st;
+}
+
 /* ============================ lookups ============================ */
 function T(id){ for(var i=0;i<S.teachers.length;i++) if(S.teachers[i].id===id) return S.teachers[i]; return null; }
 function C(id){ for(var i=0;i<S.classes.length;i++) if(S.classes[i].id===id) return S.classes[i]; return null; }
@@ -937,7 +950,7 @@ function bindPeriod(){
 /* ============================ view: setup ============================ */
 function vSetup(){
   var h='<div class="phead"><div><h1>Teachers, classes and subjects</h1>'+ 
-    '<div class="note">Everything the timetable is built from. Removing an item that is still in use will ask first.</div></div></div>';
+    '<div class="note">Everything the timetable is built from. New teachers, classes and subjects appear immediately in Auto-build, every timetable view, cover lists, exports and print forms.</div></div></div>';
 
   h+='<div class="card"><h2>Teachers <span class="hint">'+S.teachers.length+' on roster</span>'+
      '<span class="spacer"></span><button class="btn sm" id="groupT">EST then PST</button> '+
@@ -1036,7 +1049,7 @@ function bindAll(sel,fn){ [].forEach.call(document.querySelectorAll(sel), functi
   el.onclick=function(e){ e.preventDefault(); fn(el); }; }); }
 
 function teacherDlg(id){
-  var t=id?T(id):{ name:'', desig:'PST (Arts)', max:8, unavail:[] };
+  var t=id?T(id):{ name:'', desig:'PST (Arts)', max:S.rules.defaultMax||NP(), unavail:[] };
   var pills=''; for(var p=1;p<=NP();p++) pills+='<label><input type="checkbox" class="uav" value="'+p+'"'+
     (t.unavail.indexOf(p)>=0?' checked':'')+'> P'+p+'</label>';
   openDlg(id?'Edit teacher':'Add teacher',
@@ -1054,7 +1067,8 @@ function teacherDlg(id){
     else S.teachers.push({ id:uid('t'), name:n, desig:$('tD').value.trim(), max:+$('tM').value, unavail:un });
     if(S.teacherOrderMode==='grouped') groupTeachersByDesignation(S);
     else { S.teacherOrderMode='manual'; S.teacherOrderVersion=1; }
-    DIRTY=true; closeDlg(); render(); toast(id?'Teacher saved':'Teacher added');
+    ensureCatalogSync(S); DIRTY=true; closeDlg(); render();
+    toast(id?'Teacher saved everywhere':'Teacher added everywhere');
   };
 }
 function delTeacher(id){
@@ -1090,7 +1104,8 @@ function classDlg(id){
     if(id){ var o=C(id); o.name=n; o.ct=$('cT').value; o.periods=np;
       for(var p=np+1;p<=NP();p++){ setCell(id,p,null); delete S.locks[id+'|'+p]; delete S.planLocks[id+'|'+p]; } }
     else S.classes.push({ id:uid('c'), name:n, ct:$('cT').value, periods:np });
-    DIRTY=true; closeDlg(); render(); toast(id?'Class saved':'Class added');
+    ensureCatalogSync(S); DIRTY=true; closeDlg(); render();
+    toast(id?'Class saved everywhere':'Class added everywhere');
   };
 }
 function delClass(id){
@@ -1112,7 +1127,8 @@ function subjDlg(id){
     if(S.subjects.filter(function(x){ return x.name===n && x.id!==id; }).length){ toast('That subject already exists'); return; }
     if(id) SU(id).name=n; else S.subjects.push({ id:uid('s'), name:n });
     S.subjects.sort(function(x,y){ return x.name<y.name?-1:1; });
-    DIRTY=true; closeDlg(); render(); toast(id?'Subject saved':'Subject added');
+    ensureCatalogSync(S); DIRTY=true; closeDlg(); render();
+    toast(id?'Subject saved everywhere':'Subject added everywhere');
   };
 }
 function delSubj(id){
@@ -1182,7 +1198,7 @@ function bindTime(){
 
 /* ============================ view: auto-build ============================ */
 function currentReqs(){ return planFrom(S); }
-function PLAN(){ if(!S.plan) S.plan=currentReqs(); return S.plan; }
+function PLAN(){ ensureCatalogSync(S); return S.plan; }
 function fixedPeriodOptions(c,selected){
   selected=+selected||0;
   var h='<option value="0"'+(!selected?' selected':'')+'>Any period</option>';
@@ -2189,8 +2205,8 @@ if($('fileIn')) $('fileIn').onchange=function(e){
       var o=JSON.parse(rd.result);
       if(!o.classes||!o.teachers||!o.timing) throw new Error('missing sections');
       S=o; S.locks=S.locks||{}; S.planLocks=S.planLocks||{}; S.rules=S.rules||{maxConsecutive:6,defaultMax:8};
-      if(!S.plan) S.plan=planFrom(S);
       S.leave=S.leave||{}; S.cover=S.cover||{}; S.coverExcluded=S.coverExcluded||{}; S.meta=S.meta||{};
+      ensureCatalogSync(S);
       ensureTeacherOrder(S);
       applyTheme(S.meta.theme||'classic');
       DIRTY=false; render(); toast('Data file opened');
@@ -2296,6 +2312,7 @@ function vHelp(){
 
 /* ============================ boot ============================ */
 function render(){
+  ensureCatalogSync(S);
   var h='';
   if(VIEW==='dash') h=vDash();
   else if(VIEW==='grid') h=vGrid();
@@ -2325,8 +2342,8 @@ function render(){
   if(pre && pre.classes && pre.teachers && pre.timing){
     S=pre; S.locks=S.locks||{}; S.planLocks=S.planLocks||{}; S.leave=S.leave||{}; S.cover=S.cover||{}; S.coverExcluded=S.coverExcluded||{};
     S.rules=S.rules||{maxConsecutive:6,defaultMax:8}; S.meta=S.meta||{};
-    if(!S.plan) S.plan=planFrom(S);
   } else S=buildSeed();
+  ensureCatalogSync(S);
   ensureTeacherOrder(S);
   node.textContent='null';
   SELF_HTML='<!DOCTYPE html>\n'+document.documentElement.outerHTML;

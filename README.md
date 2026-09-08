@@ -4,6 +4,8 @@ A browser-based school timetable portal with class/teacher views, weekday-specif
 
 Daily cover exclusions let you mark teachers who must not receive alternative periods on a chosen date. These exclusions are retained in Firebase versions, shown on the daily printed order, and included in the monthly cover CSV.
 
+Teachers, classes and subjects use one synchronized catalogue. Newly added entries immediately appear in Auto-build, class-wise and teacher-wise screens, cover tools, exports and printable timetables, and the synchronized data is stored in Firebase versions.
+
 The hosted app starts from `index.html`. Its working timetable data is stored in Firebase rather than browser downloads.
 
 ## Run locally

@@ -65,6 +65,7 @@ function normalizeState(value) {
   state.coverExcluded ||= {};
   state.rules ||= { maxConsecutive: 6, defaultMax: 8 };
   if (!state.plan && typeof window.planFrom === "function") state.plan = window.planFrom(state);
+  if (typeof window.ensureCatalogSync === "function") window.ensureCatalogSync(state);
   if (typeof window.ensureTeacherOrder === "function") window.ensureTeacherOrder(state);
   return state;
 }
@@ -111,7 +112,7 @@ function parentRecord(name, state, includeCreated, versionCount) {
     effectiveFrom: state.meta?.wef || "",
     state,
     ownerUid: user.uid,
-    schemaVersion: 6,
+    schemaVersion: 7,
     versionCount,
     updatedAt: serverTimestamp(),
   };
