@@ -6,6 +6,8 @@ Daily cover exclusions let you mark teachers who must not receive alternative pe
 
 Teachers, classes and subjects use one synchronized catalogue. Newly added entries immediately appear in Auto-build, class-wise and teacher-wise screens, cover tools, exports and printable timetables, and the synchronized data is stored in Firebase versions.
 
+Teachers and classes each have a saved custom priority order. Drag either roster to rearrange it; Firebase preserves the order and the same sequence is used throughout Auto-build, timetable views, exports and PDFs.
+
 When an older saved timetable has class lessons but a missing or empty Auto-build plan, the portal restores that class plan once from the current class timetable. An individual **Load from class timetable** button is also shown beside any empty class plan, avoiding changes to other classes.
 
 Failed Auto-build attempts include an actionable diagnostic report: exact plan errors, the deepest blocked class and period, rejected lessons and rules, teacher demand/capacity pressure, and suggested corrections.

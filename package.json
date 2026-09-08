@@ -12,6 +12,7 @@
     "preview": "vite preview",
     "qa:auto-build": "node scripts/auto-build-qa.mjs",
     "qa:catalog": "node scripts/catalog-sync-qa.mjs",
+    "qa:class-order": "node scripts/class-order-qa.mjs",
     "qa:cover": "node scripts/cover-qa.mjs",
     "qa:pdf": "node scripts/pdf-qa.mjs"
   },

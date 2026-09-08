@@ -391,6 +391,7 @@ function buildSeed(){
     teachers:[], classes:[], subjects:[], tt:{}, locks:{}, planLocks:{}, leave:{}, cover:{}, coverExcluded:{},
     planCatalogVersion:2,
     teacherOrderMode:'grouped', teacherOrderVersion:1,
+    classOrderMode:'manual', classOrderVersion:1,
     rules:{ maxConsecutive:0, defaultMax:8 }
   };
   var tmap={}, smap={}, cmap={};
@@ -640,6 +641,30 @@ function moveTeacherByStep(id,delta){
   if(from<0||to<0||to>=S.teachers.length) return false;
   var target=S.teachers[to];
   return moveTeacherInRoster(id,target.id,delta>0);
+}
+
+/* class display, Auto-build, export and print priority */
+function ensureClassOrder(st){
+  if(!st.classOrderVersion){ st.classOrderMode='manual'; st.classOrderVersion=1; return true; }
+  if(st.classOrderMode!=='manual') st.classOrderMode='manual';
+  return false;
+}
+function moveClassInRoster(sourceId,targetId,after){
+  if(!sourceId||!targetId||sourceId===targetId) return false;
+  var from=S.classes.findIndex(function(c){return c.id===sourceId;}), item;
+  if(from<0) return false;
+  item=S.classes.splice(from,1)[0];
+  var to=S.classes.findIndex(function(c){return c.id===targetId;});
+  if(to<0){ S.classes.splice(from,0,item); return false; }
+  S.classes.splice(to+(after?1:0),0,item);
+  S.classOrderMode='manual'; S.classOrderVersion=1; DIRTY=true;
+  return true;
+}
+function moveClassByStep(id,delta){
+  var from=S.classes.findIndex(function(c){return c.id===id;}), to=from+delta;
+  if(from<0||to<0||to>=S.classes.length) return false;
+  var target=S.classes[to];
+  return moveClassInRoster(id,target.id,delta>0);
 }
 
 /* ============================ chrome ============================ */
@@ -977,11 +1002,16 @@ function vSetup(){
   h+='</tbody></table></div></div>';
 
   h+='<div class="card"><h2>Classes <span class="hint">'+S.classes.length+'</span><span class="spacer"></span>'+
-     '<button class="btn sm pri" id="addC">Add class</button></h2><div class="tw"><table>'+
-     '<thead><tr><th>Class</th><th>Class teacher</th><th class="num">Periods per day</th><th class="num">Filled</th><th></th></tr></thead><tbody>';
-  S.classes.forEach(function(c){
+     '<button class="btn sm pri" id="addC">Add class</button></h2>'+
+     '<div class="teacher-order-note"><b>Class priority: custom order.</b> '+
+     '<span>Drag classes into the required order. This order is saved online and used in Auto-build, class timetables, lists, exports and PDFs.</span></div>'+
+     '<div class="tw"><table>'+
+     '<thead><tr><th class="num">Priority</th><th>Class</th><th>Class teacher</th><th class="num">Periods per day</th><th class="num">Filled</th><th></th></tr></thead><tbody>';
+  S.classes.forEach(function(c,index){
     var filled=0; for(var p=1;p<=c.periods;p++) if(cell(c.id,p)) filled++;
-    h+='<tr><td><b>'+esc(c.name)+'</b></td><td>'+esc(tname(c.ct))+'</td><td class="num">'+c.periods+
+    h+='<tr class="teacher-order-row" draggable="true" tabindex="0" data-order-class="'+c.id+'" aria-label="Class priority '+(index+1)+': '+esc(c.name)+'">'+
+       '<td class="drag-priority"><span class="drag-handle" aria-hidden="true">↕</span>#'+(index+1)+'</td>'+
+       '<td><b>'+esc(c.name)+'</b></td><td>'+esc(tname(c.ct))+'</td><td class="num">'+c.periods+
        '</td><td class="num">'+filled+'</td>'+ 
        '<td><button class="btn sm" data-ec="'+c.id+'">Edit</button> <button class="btn sm" data-dc="'+c.id+'">Remove</button></td></tr>';
   });
@@ -1015,6 +1045,7 @@ function bindSetup(){
   bindAll('[data-dc]', function(el){ delClass(el.dataset.dc); });
   bindAll('[data-ds]', function(el){ delSubj(el.dataset.ds); });
   bindTeacherOrder();
+  bindClassOrder();
   $('mSave').onclick=function(){
     S.meta.school=$('mSch').value.trim(); S.meta.head=$('mHead').value.trim(); S.meta.wef=$('mWef').value.trim();
     DIRTY=true; render(); toast('School details saved');
@@ -1047,6 +1078,36 @@ function bindTeacherOrder(){
       if(!e.altKey||(e.key!=='ArrowUp'&&e.key!=='ArrowDown')) return;
       e.preventDefault();
       if(moveTeacherByStep(row.dataset.orderTeacher,e.key==='ArrowUp'?-1:1)){ render(); toast('Teacher priority saved'); }
+    });
+  });
+}
+function bindClassOrder(){
+  var draggedId='';
+  var rows=[].slice.call(document.querySelectorAll('[data-order-class]'));
+  function clearMarks(){ rows.forEach(function(row){ row.classList.remove('dragging','drop-before','drop-after'); }); }
+  rows.forEach(function(row){
+    row.addEventListener('dragstart',function(e){
+      draggedId=row.dataset.orderClass; row.classList.add('dragging');
+      e.dataTransfer.effectAllowed='move'; e.dataTransfer.setData('text/plain',draggedId);
+    });
+    row.addEventListener('dragover',function(e){
+      if(!draggedId||draggedId===row.dataset.orderClass) return;
+      e.preventDefault();
+      rows.forEach(function(r){ r.classList.remove('drop-before','drop-after'); });
+      var after=e.clientY>row.getBoundingClientRect().top+row.getBoundingClientRect().height/2;
+      row.classList.add(after?'drop-after':'drop-before'); e.dataTransfer.dropEffect='move';
+    });
+    row.addEventListener('drop',function(e){
+      e.preventDefault();
+      var after=row.classList.contains('drop-after');
+      if(moveClassInRoster(draggedId,row.dataset.orderClass,after)){ render(); toast('Class priority saved'); }
+      else clearMarks();
+    });
+    row.addEventListener('dragend',clearMarks);
+    row.addEventListener('keydown',function(e){
+      if(!e.altKey||(e.key!=='ArrowUp'&&e.key!=='ArrowDown')) return;
+      e.preventDefault();
+      if(moveClassByStep(row.dataset.orderClass,e.key==='ArrowUp'?-1:1)){ render(); toast('Class priority saved'); }
     });
   });
 }
@@ -1110,6 +1171,7 @@ function classDlg(id){
     if(id){ var o=C(id); o.name=n; o.ct=$('cT').value; o.periods=np;
       for(var p=np+1;p<=NP();p++){ setCell(id,p,null); delete S.locks[id+'|'+p]; delete S.planLocks[id+'|'+p]; } }
     else S.classes.push({ id:uid('c'), name:n, ct:$('cT').value, periods:np });
+    ensureClassOrder(S);
     ensureCatalogSync(S); DIRTY=true; closeDlg(); render();
     toast(id?'Class saved everywhere':'Class added everywhere');
   };
@@ -2301,6 +2363,7 @@ if($('fileIn')) $('fileIn').onchange=function(e){
       S.leave=S.leave||{}; S.cover=S.cover||{}; S.coverExcluded=S.coverExcluded||{}; S.meta=S.meta||{};
       ensureCatalogSync(S);
       ensureTeacherOrder(S);
+      ensureClassOrder(S);
       applyTheme(S.meta.theme||'classic');
       DIRTY=false; render(); toast('Data file opened');
     }catch(err){
@@ -2373,7 +2436,7 @@ function vHelp(){
    '<div class="note">Sign in once, then all timetable data and saved versions stay online in Firebase.</div></div></div>'+ 
    '<div class="card"><h2>Getting started</h2><div class="body"><ol class="steps">'+
    '<li><b>Check the roster</b>Open <i>Teachers, classes, subjects</i> and make sure the names, designations and class list match your school.</li>'+
-   '<li><b>Set teacher priority</b>In the Teachers table, drag rows into the required order. Existing data starts with EST teachers above PST teachers. The order saves online and is used on teacher screens, CSV files and PDFs.</li>'+
+   '<li><b>Set teacher and class priority</b>Drag rows in either table into the required order. Existing teacher data starts with EST teachers above PST teachers. Both orders save online and are used in Auto-build, timetable screens, CSV files and PDFs.</li>'+
    '<li><b>Check the timings</b>Open <i>Period timings</i>. These times print on every sheet, so get them right first.</li>'+
    '<li><b>Fill the timetable</b>Open <i>Class timetable</i> and click any cell. Set the same lesson for every day, or give selected weekdays different subjects and teachers. Or use <i>Auto-build</i> to place the regular lessons at once.</li>'+ 
    '<li><b>Fix required periods</b>In <i>Auto-build</i>, choose P1–P8 in the Fixed period column for any lesson that must stay in that slot. Choose Any period when Auto-build may place it freely.</li>'+
@@ -2406,6 +2469,7 @@ function vHelp(){
 /* ============================ boot ============================ */
 function render(){
   ensureCatalogSync(S);
+  ensureClassOrder(S);
   var h='';
   if(VIEW==='dash') h=vDash();
   else if(VIEW==='grid') h=vGrid();
@@ -2438,6 +2502,7 @@ function render(){
   } else S=buildSeed();
   ensureCatalogSync(S);
   ensureTeacherOrder(S);
+  ensureClassOrder(S);
   node.textContent='null';
   SELF_HTML='<!DOCTYPE html>\n'+document.documentElement.outerHTML;
   applyTheme(S.meta.theme||'classic');
