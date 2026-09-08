@@ -8,6 +8,8 @@ Teachers, classes and subjects use one synchronized catalogue. Newly added entri
 
 When an older saved timetable has class lessons but a missing or empty Auto-build plan, the portal restores that class plan once from the current class timetable. An individual **Load from class timetable** button is also shown beside any empty class plan, avoiding changes to other classes.
 
+Failed Auto-build attempts include an actionable diagnostic report: exact plan errors, the deepest blocked class and period, rejected lessons and rules, teacher demand/capacity pressure, and suggested corrections.
+
 The hosted app starts from `index.html`. Its working timetable data is stored in Firebase rather than browser downloads.
 
 ## Run locally

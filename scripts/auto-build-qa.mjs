@@ -92,6 +92,49 @@ try {
       && repeatedCard.querySelectorAll("tbody tr.problem").length === 2;
     S.classes[0].name = "5th";
     success.lowerClassAllowed = subjectRepeatAnalysis("mon").issues.length === 0;
+
+    S.classes = [{ id: "c1", name: "5th", ct: "", periods: 2 }];
+    S.teachers = [
+      { id: "t1", name: "ONE", desig: "EST", max: 1, unavail: [] },
+      { id: "t2", name: "TWO", desig: "PST", max: 2, unavail: [] },
+    ];
+    S.plan = { c1: [
+      { s: "s1", t: "t1", n: 1, p: 0 },
+      { s: "s2", t: "t1", n: 1, p: 0 },
+    ] };
+    S.planCatalogVersion = 2;
+    S.tt = {}; S.locks = {}; S.planLocks = {};
+    VIEW = "gen";
+    render();
+    runSolver();
+    const exactError = document.getElementById("genOut").textContent;
+    success.teacherCapacityExplained = exactError.includes("ONE is assigned 2 planned periods")
+      && exactError.includes("daily limit 1") && exactError.includes("exact errors");
+
+    S.classes = [
+      { id: "c1", name: "5th A", ct: "", periods: 2 },
+      { id: "c2", name: "5th B", ct: "", periods: 2 },
+    ];
+    S.teachers[0].max = 2;
+    S.plan = {
+      c1: [
+        { s: "s1", t: "t1", n: 1, p: 0 },
+        { s: "s2", t: "t2", n: 1, p: 0 },
+      ],
+      c2: [
+        { s: "s2", t: "t1", n: 1, p: 0 },
+        { s: "s1", t: "t2", n: 1, p: 0 },
+      ],
+    };
+    S.rules.maxConsecutive = 1;
+    S.tt = {}; S.locks = {}; S.planLocks = {};
+    render();
+    runSolver();
+    const searchError = document.getElementById("genOut").textContent;
+    success.searchFailureNamesBlockedSlot = searchError.includes("Where Auto-build gets stuck")
+      && searchError.includes("back-to-back limit");
+    success.searchFailureShowsPressure = searchError.includes("Teachers under the most pressure")
+      && searchError.includes("no spare slot") && searchError.includes("How to rectify it");
     return success;
   });
 
@@ -99,8 +142,13 @@ try {
       || result.flexibleLesson?.s !== "s2" || !result.fixedSlotLocked || !result.fixedSourceSaved
       || !result.printReflected || !result.conflictDetected || !result.repeatedPlanBlocked
       || !result.manualDuplicateBlocked || !result.existingDuplicatesHighlighted
-      || !result.printedDuplicatesOutlined || !result.lowerClassAllowed) {
+      || !result.printedDuplicatesOutlined || !result.lowerClassAllowed
+      || !result.teacherCapacityExplained || !result.searchFailureNamesBlockedSlot
+      || !result.searchFailureShowsPressure) {
     throw new Error(`Fixed-period Auto-build QA failed: ${JSON.stringify(result)}`);
+  }
+  if (process.env.QA_SCREENSHOT) {
+    await page.screenshot({ path: process.env.QA_SCREENSHOT, fullPage: true });
   }
   process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
 } finally {

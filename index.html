@@ -1295,6 +1295,78 @@ function bindGen(){
 }
 
 /* ---- the solver ---- */
+function autoBuildDemandSummary(REQS){
+  var by={};
+  S.teachers.forEach(function(t){ by[t.id]={teacher:t,need:0,classes:{}}; });
+  S.classes.forEach(function(c){
+    (REQS[c.id]||[]).forEach(function(r){
+      if(!by[r.t]) return;
+      var n=Math.max(0,+r.n||0);
+      by[r.t].need+=n; by[r.t].classes[c.id]=(by[r.t].classes[c.id]||0)+n;
+    });
+  });
+  return Object.keys(by).map(function(tid){
+    var row=by[tid], t=row.teacher;
+    row.available=[];
+    for(var p=1;p<=NP();p++) if(t.unavail.indexOf(p)<0) row.available.push(p);
+    row.limit=Math.min(t.max||NP(),row.available.length);
+    row.slack=row.limit-row.need;
+    row.classText=Object.keys(row.classes).map(function(cid){ return cname(cid)+' '+row.classes[cid]; }).join(', ');
+    return row;
+  });
+}
+function autoBuildPlanProblems(REQS){
+  var out=[];
+  function add(message){ if(out.indexOf(message)<0) out.push(message); }
+  S.classes.forEach(function(c){
+    (REQS[c.id]||[]).forEach(function(r){
+      if(!SU(r.s)) add(c.name+' has a lesson whose subject was removed. Choose a valid subject.');
+      if(!T(r.t)) add(c.name+' has a lesson whose teacher was removed. Choose a valid teacher.');
+    });
+  });
+  autoBuildDemandSummary(REQS).forEach(function(row){
+    if(row.need<=row.limit) return;
+    var why=[];
+    if((row.teacher.max||NP())<row.need) why.push('daily limit '+(row.teacher.max||NP()));
+    if(row.available.length<row.need) why.push('only '+row.available.length+' allowed period slots');
+    add(row.teacher.name+' is assigned '+row.need+' planned periods ('+row.classText+'), but can take only '+row.limit+
+      (why.length?' because of '+why.join(' and '):'')+'. Reduce this teacher\'s lessons, raise the limit, or change unavailable periods.');
+  });
+  return out;
+}
+function autoBuildFailureHtml(REQS,trace,timedOut){
+  var h='<div class="banner bad"><b>No clash-free arrangement found.</b> Auto-build checked the plan but every attempted arrangement reached a blocked slot.</div>'+
+    '<div class="card" style="margin-top:10px"><h2>Where Auto-build gets stuck</h2><div class="body">';
+  if(trace&&trace.classId){
+    h+='<div class="banner warn" style="margin:0 0 10px"><b>'+esc(cname(trace.classId))+' — P'+trace.period+
+      '</b> is the deepest blocked point found. These remaining lessons could not legally be placed there:</div><ul class="tight">';
+    (trace.lessons||[]).forEach(function(item){
+      h+='<li><b>'+esc(sname(item.s))+' / '+esc(tname(item.t))+'</b> — '+esc(item.reasons.length?item.reasons.join('; '):
+        'placing it here causes a later class or teacher conflict')+'</li>';
+    });
+    h+='</ul>';
+  }else{
+    h+='<div class="banner warn" style="margin:0 0 10px">The plan has several interacting restrictions, so no single blocked row could be isolated.</div>';
+  }
+  var rows=autoBuildDemandSummary(REQS).filter(function(r){return r.need;}).sort(function(a,b){return a.slack-b.slack||b.need-a.need;}).slice(0,8);
+  if(rows.length){
+    h+='<h3 style="margin:14px 0 6px">Teachers under the most pressure</h3><div class="tw"><table><thead><tr><th>Teacher</th><th>Planned periods</th><th>Basic capacity</th><th>Classes</th><th>Pressure</th></tr></thead><tbody>';
+    rows.forEach(function(r){
+      h+='<tr><td><b>'+esc(r.teacher.name)+'</b></td><td class="num">'+r.need+'</td><td class="num">'+r.limit+'</td><td>'+esc(r.classText||'—')+'</td><td>'+
+        (r.slack<0?'<span class="chip bad">over by '+(-r.slack)+'</span>':r.slack===0?'<span class="chip warn">no spare slot</span>':
+          '<span class="chip mute">'+r.slack+' spare</span>')+'</td></tr>';
+    });
+    h+='</tbody></table></div>';
+  }
+  h+='<h3 style="margin:14px 0 6px">How to rectify it</h3><ol class="tight">'+
+    '<li>Start with the blocked class and teacher named above; reduce or reassign one planned lesson.</li>'+
+    '<li>Check that teacher\'s <b>Most periods a day</b> and <b>Cannot teach in</b> settings.</li>'+
+    '<li>If the reason says back-to-back limit, raise <b>Most periods in a row</b> under Period timings.</li>'+
+    '<li>Use a fixed period only where necessary; too many fixed or locked cells remove the remaining choices.</li>'+
+    '</ol>'+(timedOut?'<div class="small muted" style="margin-top:8px">The six-second search limit was reached. Correct the tightest items above and try again.</div>':'')+
+    '</div></div>';
+  return h;
+}
 function autoBuildFixedState(REQS){
   var fixed={}, manualLocks={}, planLocks={}, planned={}, problems=[], seen={}, fixedClashes={}, fixedSubjects={}, fixedSubjectClashes={}, counts={}, runs={};
   function problem(message){ if(problems.indexOf(message)<0) problems.push(message); }
@@ -1363,6 +1435,7 @@ function autoBuildFixedState(REQS){
 function runSolver(){
   var np=NP(), out=$('genOut'), REQS=PLAN();
   var prep=autoBuildFixedState(REQS), lessons={}, problems=prep.problems.slice();
+  autoBuildPlanProblems(REQS).forEach(function(p){ if(problems.indexOf(p)<0) problems.push(p); });
   S.classes.forEach(function(c){
     var rs=REQS[c.id]||[], arr=[];
     if(upperClassNoRepeat(c)){
@@ -1384,8 +1457,9 @@ function runSolver(){
     lessons[c.id]=arr;
   });
   if(problems.length){
-    out.innerHTML='<div class="banner bad"><b>Fix the plan first.</b><ul class="tight">'+
-      problems.map(function(p){ return '<li>'+esc(p)+'</li>'; }).join('')+'</ul></div>';
+    out.innerHTML='<div class="banner bad"><b>Auto-build cannot start until these exact errors are corrected.</b><ol class="tight">'+
+      problems.map(function(p){ return '<li>'+esc(p)+'</li>'; }).join('')+'</ol></div>'+
+      '<div class="small muted" style="margin:6px 2px 0">Correct the named class, teacher, subject or fixed period, then choose Build timetable again.</div>';
     return;
   }
 
@@ -1395,12 +1469,13 @@ function runSolver(){
   });
   slots.sort(function(a,b){ return a.p-b.p || (a.c<b.c?-1:1); });
 
-  var best=null, restarts=60, t0=Date.now();
+  var best=null, restarts=60, t0=Date.now(), bestTrace=null;
   for(var r=0; r<restarts && !best; r++){
     if(Date.now()-t0 > 6000) break;
     var pool={}; Object.keys(lessons).forEach(function(k){ pool[k]=shuffle(lessons[k].slice()); });
     var order = r===0 ? slots.slice() : shuffle(slots.slice()).sort(function(a,b){ return a.p-b.p; });
-    var res=attempt(order, pool, np, prep.fixed);
+    var trace=r===0?{depth:-1}:null, res=attempt(order, pool, np, prep.fixed, trace);
+    if(trace&&(!bestTrace||trace.depth>bestTrace.depth)) bestTrace=trace;
     if(res) best=res;
   }
 
@@ -1411,9 +1486,7 @@ function runSolver(){
     return;
   }
   if(!best){
-    out.innerHTML='<div class="banner bad"><b>No clash-free arrangement found.</b> '+
-      'Usually one teacher is asked for more periods than the day allows, or two classes both need the same teacher too often. '+
-      'Try raising a teacher\u2019s period limit, relaxing the back-to-back rule on the timings page, or splitting a subject between two teachers.</div>';
+    out.innerHTML=autoBuildFailureHtml(REQS,bestTrace,Date.now()-t0>=6000);
     return;
   }
   S.classes.forEach(function(c){ for(var p=1;p<=NP();p++) if(!prep.fixed[c.id+'|'+p]) setCell(c.id,p,null); });
@@ -1432,14 +1505,15 @@ function runSolver(){
     ' Open the class timetable to review, then print.</div>';
   toast('Timetable built');
 }
-function attempt(order, pool, np, fixed){
-  var placed={}, busy={}, cnt={}, seq={}, usedSubjects={};
+function attempt(order, pool, np, fixed, trace){
+  var placed={}, busy={}, busyOwner=trace?{}:null, cnt={}, seq={}, usedSubjects={};
   Object.keys(fixed||{}).forEach(function(k){
     var parts=k.split('|'), cid=parts[0], p=+parts[1];
     runningDayIds(p).forEach(function(d){
         var e=lessonOn(fixed[k],d); if(!e) return;
         var dk=d+'|'+e.t;
-        busy[dk+'|'+p]=true; cnt[dk]=(cnt[dk]||0)+1; (seq[dk]=seq[dk]||{})[p]=true;
+        busy[dk+'|'+p]=true; if(busyOwner) busyOwner[dk+'|'+p]=cid;
+        cnt[dk]=(cnt[dk]||0)+1; (seq[dk]=seq[dk]||{})[p]=true;
         if(upperClassNoRepeat(C(cid))&&e.s) usedSubjects[d+'|'+cid+'|'+e.s]=true;
       });
   });
@@ -1454,28 +1528,48 @@ function attempt(order, pool, np, fixed){
     if(i>=order.length) return true;
     var sl=order[i], arr=pool[sl.c];
     if(!arr.length) return bt(i+1);
-    var tried={};
+    var tried={}, rejected=[];
     for(var j=0;j<arr.length;j++){
       var L=arr[j], key=L.s+'>'+L.t;
       if(tried[key]) continue; tried[key]=true;
-      var tt=T(L.t);
-      if(tt && tt.unavail.indexOf(sl.p)>=0) continue;
+      var tt=T(L.t), reasons=[], busyDays={}, limitDays=[], consecutiveDays=[], repeatDays=[];
+      if(tt && tt.unavail.indexOf(sl.p)>=0){
+        if(trace) rejected.push({s:L.s,t:L.t,reasons:[tt.name+' is marked unavailable in P'+sl.p]});
+        continue;
+      }
       var noRepeat=upperClassNoRepeat(C(sl.c));
-      var days=runningDayIds(sl.p), ok=days.every(function(d){
+      var days=runningDayIds(sl.p), ok=true;
+      days.forEach(function(d){
         var dk=d+'|'+L.t;
-        return !busy[dk+'|'+sl.p] && (cnt[dk]||0)<(tt?(tt.max||np):np) && runLen(dk,sl.p)<=S.rules.maxConsecutive &&
-          (!noRepeat||!usedSubjects[d+'|'+sl.c+'|'+L.s]);
+        if(busy[dk+'|'+sl.p]){ ok=false; if(trace){ var owner=busyOwner[dk+'|'+sl.p]||''; (busyDays[owner]=busyDays[owner]||[]).push(d); } }
+        if((cnt[dk]||0)>=(tt?(tt.max||np):np)){ ok=false; if(trace) limitDays.push(d); }
+        if(runLen(dk,sl.p)>S.rules.maxConsecutive){ ok=false; if(trace) consecutiveDays.push(d); }
+        if(noRepeat&&usedSubjects[d+'|'+sl.c+'|'+L.s]){ ok=false; if(trace) repeatDays.push(d); }
       });
+      if(trace){
+        Object.keys(busyDays).forEach(function(owner){ reasons.push(tname(L.t)+' already teaches '+cname(owner)+' in P'+sl.p+' on '+dayLabel(busyDays[owner])); });
+        if(limitDays.length) reasons.push(tname(L.t)+' reaches the daily period limit on '+dayLabel(limitDays));
+        if(consecutiveDays.length) reasons.push(tname(L.t)+' would exceed the '+S.rules.maxConsecutive+'-period back-to-back limit on '+dayLabel(consecutiveDays));
+        if(repeatDays.length) reasons.push(cname(sl.c)+' already has '+sname(L.s)+' on '+dayLabel(repeatDays));
+      }
+      if(trace&&reasons.length){
+        reasons=reasons.filter(function(reason,index){return reasons.indexOf(reason)===index;});
+        rejected.push({s:L.s,t:L.t,reasons:reasons});
+      }
       if(!ok) continue;
-      days.forEach(function(d){ var dk=d+'|'+L.t; busy[dk+'|'+sl.p]=true; cnt[dk]=(cnt[dk]||0)+1; (seq[dk]=seq[dk]||{})[sl.p]=true;
+      days.forEach(function(d){ var dk=d+'|'+L.t; busy[dk+'|'+sl.p]=true; if(busyOwner) busyOwner[dk+'|'+sl.p]=sl.c; cnt[dk]=(cnt[dk]||0)+1; (seq[dk]=seq[dk]||{})[sl.p]=true;
         if(noRepeat) usedSubjects[d+'|'+sl.c+'|'+L.s]=true; });
       placed[sl.c+'|'+sl.p]={ s:L.s, t:L.t };
       arr.splice(j,1);
       if(bt(i+1)) return true;
       arr.splice(j,0,L);
       delete placed[sl.c+'|'+sl.p];
-      days.forEach(function(d){ var dk=d+'|'+L.t; delete busy[dk+'|'+sl.p]; cnt[dk]--; delete seq[dk][sl.p];
+      days.forEach(function(d){ var dk=d+'|'+L.t; delete busy[dk+'|'+sl.p]; if(busyOwner) delete busyOwner[dk+'|'+sl.p]; cnt[dk]--; delete seq[dk][sl.p];
         if(noRepeat) delete usedSubjects[d+'|'+sl.c+'|'+L.s]; });
+    }
+    if(trace&&i>=trace.depth){
+      trace.depth=i; trace.classId=sl.c; trace.period=sl.p;
+      trace.lessons=rejected.length?rejected:arr.slice(0,4).map(function(L){return {s:L.s,t:L.t,reasons:[]};});
     }
     return false;
   }
@@ -2320,7 +2414,7 @@ function vHelp(){
    '</div></div>'+
    '<div class="card"><h2>If something looks wrong</h2><div class="body"><ul class="tight">'+
    '<li><b>A cell is red</b> — a teacher is booked in two classes at once on at least one weekday. Click it and check the status beside each weekday.</li>'+ 
-   '<li><b>Auto-build says it cannot find an arrangement</b> — check the fixed-period messages first. Otherwise a teacher may be asked for more periods than the day holds. Raise their limit, relax the back-to-back rule, or split a subject between two teachers.</li>'+
+   '<li><b>Auto-build says it cannot find an arrangement</b> — read <i>Where Auto-build gets stuck</i>. It names the blocked class, period, lesson and teacher rule, then shows the teachers under the most pressure and the settings to correct.</li>'+
    '<li><b>A PDF cannot be generated</b> — confirm you are signed in and online, then retry the A4 PDF download.</li>'+
    '</ul></div></div>';
 }
