@@ -125,13 +125,50 @@ try {
     delete imported.plan[classId];
     ensureCatalogSync(imported);
     result.loadedStateRepairsMissingClassPlan = Array.isArray(imported.plan[classId]);
+    const legacy = JSON.parse(JSON.stringify(S));
+    legacy.plan[classId] = [];
+    delete legacy.planCatalogVersion;
+    ensureCatalogSync(legacy);
+    result.legacyEmptyPlanRecovered = legacy.plan[classId].length === 1
+      && legacy.plan[classId][0].s === subjectId && legacy.plan[classId][0].t === teacherId;
+    legacy.plan[classId] = [];
+    ensureCatalogSync(legacy);
+    result.intentionalEmptyPlanStaysEmpty = legacy.plan[classId].length === 0;
+
+    S.plan[classId] = [];
+    S.planCatalogVersion = 2;
+    VIEW = "gen";
+    render();
+    const restoreButton = document.querySelector(`[data-rload="${classId}"]`);
+    result.classRecoveryButtonVisible = Boolean(restoreButton);
+    restoreButton?.click();
+    result.classRecoveryButtonWorks = S.plan[classId].length === 1
+      && S.plan[classId][0].s === subjectId && S.plan[classId][0].t === teacherId;
     result.firebasePayloadContainsCatalog = JSON.stringify(S).includes("NEW TEACHER")
       && JSON.stringify(S).includes("NEW CLASS") && JSON.stringify(S).includes("NEW SUBJECT");
+
+    const school = buildSeed();
+    const thirdB = school.classes.find((item) => item.name === "3rd B");
+    school.plan[thirdB.id] = [];
+    delete school.planCatalogVersion;
+    ensureCatalogSync(school);
+    result.thirdBPlanRecovered = school.plan[thirdB.id].reduce((sum, row) => sum + row.n, 0) === 8;
     return result;
   });
 
   if (Object.values(result).some((value) => value !== true)) {
     throw new Error(`Catalogue synchronization QA failed: ${JSON.stringify(result)}`);
+  }
+  if (process.env.QA_SCREENSHOT) {
+    await page.evaluate(() => {
+      S = buildSeed();
+      const thirdB = S.classes.find((item) => item.name === "3rd B");
+      S.plan[thirdB.id] = [];
+      delete S.planCatalogVersion;
+      VIEW = "gen";
+      render();
+    });
+    await page.screenshot({ path: process.env.QA_SCREENSHOT, fullPage: true });
   }
   process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
 } finally {

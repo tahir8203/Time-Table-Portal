@@ -6,6 +6,8 @@ Daily cover exclusions let you mark teachers who must not receive alternative pe
 
 Teachers, classes and subjects use one synchronized catalogue. Newly added entries immediately appear in Auto-build, class-wise and teacher-wise screens, cover tools, exports and printable timetables, and the synchronized data is stored in Firebase versions.
 
+When an older saved timetable has class lessons but a missing or empty Auto-build plan, the portal restores that class plan once from the current class timetable. An individual **Load from class timetable** button is also shown beside any empty class plan, avoiding changes to other classes.
+
 The hosted app starts from `index.html`. Its working timetable data is stored in Firebase rather than browser downloads.
 
 ## Run locally

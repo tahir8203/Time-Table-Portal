@@ -389,6 +389,7 @@ function buildSeed(){
       ]
     },
     teachers:[], classes:[], subjects:[], tt:{}, locks:{}, planLocks:{}, leave:{}, cover:{}, coverExcluded:{},
+    planCatalogVersion:2,
     teacherOrderMode:'grouped', teacherOrderVersion:1,
     rules:{ maxConsecutive:6, defaultMax:8 }
   };
@@ -438,10 +439,17 @@ function ensureCatalogSync(st){
   st.teachers=Array.isArray(st.teachers)?st.teachers:[];
   st.classes=Array.isArray(st.classes)?st.classes:[];
   st.subjects=Array.isArray(st.subjects)?st.subjects:[];
-  if(!st.plan) st.plan=planFrom(st);
+  var legacy=(+st.planCatalogVersion||0)<2, derived=null;
+  function current(){ if(!derived) derived=planFrom(st); return derived; }
+  if(!st.plan) st.plan=current();
   var live={};
-  st.classes.forEach(function(c){ live[c.id]=true; if(!Array.isArray(st.plan[c.id])) st.plan[c.id]=[]; });
+  st.classes.forEach(function(c){
+    live[c.id]=true;
+    if(!Array.isArray(st.plan[c.id])) st.plan[c.id]=(current()[c.id]||[]);
+    else if(legacy && !st.plan[c.id].length && (current()[c.id]||[]).length) st.plan[c.id]=current()[c.id];
+  });
   Object.keys(st.plan).forEach(function(cid){ if(!live[cid]) delete st.plan[cid]; });
+  st.planCatalogVersion=2;
   return st;
 }
 
@@ -1207,7 +1215,7 @@ function fixedPeriodOptions(c,selected){
   return h;
 }
 function vGen(){
-  var REQS=PLAN();
+  var REQS=PLAN(), CURRENT=currentReqs();
   S.classes.forEach(function(c){ if(!REQS[c.id]) REQS[c.id]=[]; });
   var h='<div class="phead"><div><h1>Auto-build</h1>'+ 
     '<div class="note">You decide which teacher takes which subject in each class, and how many periods a day. '+
@@ -1226,6 +1234,7 @@ function vGen(){
   S.classes.forEach(function(c){
     var rs=REQS[c.id]||[], tot=rs.reduce(function(a,r){ return a+r.n; },0);
     var fixed=rs.filter(function(r){return +r.p>0;}).length, bad = tot>c.periods;
+    var currentRows=CURRENT[c.id]||[], canRestore=!rs.length && currentRows.length;
     rs.forEach(function(r,i){
       h+='<tr><td>'+(i===0?'<b>'+esc(c.name)+'</b>':'')+'</td>'+
          '<td><select data-rc="'+c.id+'" data-ri="'+i+'" data-rf="s">'+S.subjects.map(function(s){
@@ -1239,13 +1248,14 @@ function vGen(){
     h+='<tr style="background:var(--wash)"><td></td><td colspan="2" class="small muted">'+esc(c.name)+
        ' needs '+c.periods+' periods a day</td><td class="num"><b '+(bad?'style="color:var(--seal)"':'')+'>'+tot+'</b></td>'+
        '<td class="small">'+(fixed?'<span class="chip ok">'+fixed+' fixed</span>':'<span class="muted">none fixed</span>')+'</td>'+
-       '<td>'+(bad?'<span class="chip bad">too many</span>':tot<c.periods?'<span class="chip warn">'+(c.periods-tot)+' short</span>':'<span class="chip ok">exact</span>')+'</td></tr>';
+       '<td>'+(bad?'<span class="chip bad">too many</span>':tot<c.periods?'<span class="chip warn">'+(c.periods-tot)+' short</span>':'<span class="chip ok">exact</span>')+
+       (canRestore?' <button class="btn sm" data-rload="'+c.id+'">Load '+currentRows.length+' from class timetable</button>':'')+'</td></tr>';
   });
   h+='</tbody></table></div></div>';
   return h;
 }
 function bindGen(){
-  $('genLoad').onclick=function(){ S.plan=currentReqs(); DIRTY=true; render(); toast('Plan reloaded from the timetable'); };
+  $('genLoad').onclick=function(){ S.plan=currentReqs(); S.planCatalogVersion=2; DIRTY=true; render(); toast('Plan reloaded from the timetable'); };
   $('genRun').onclick=runSolver;
   $('genAddRow').onclick=function(){
     var o='<option value="">— pick a class —</option>'+S.classes.map(function(c){
@@ -1276,6 +1286,11 @@ function bindGen(){
   });
   bindAll('[data-rdel]', function(el){
     PLAN()[el.dataset.rdel].splice(+el.dataset.ri,1); DIRTY=true; render(); toast('Lesson removed');
+  });
+  bindAll('[data-rload]', function(el){
+    var cid=el.dataset.rload, rows=currentReqs()[cid]||[];
+    PLAN()[cid]=rows.map(function(r){ return {s:r.s,t:r.t,n:r.n,p:+r.p||0}; });
+    S.planCatalogVersion=2; DIRTY=true; render(); toast(cname(cid)+' plan loaded from its current timetable');
   });
 }
 

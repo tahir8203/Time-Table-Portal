@@ -112,7 +112,7 @@ function parentRecord(name, state, includeCreated, versionCount) {
     effectiveFrom: state.meta?.wef || "",
     state,
     ownerUid: user.uid,
-    schemaVersion: 7,
+    schemaVersion: 8,
     versionCount,
     updatedAt: serverTimestamp(),
   };
@@ -200,12 +200,14 @@ async function perform(action, { successMessage = "", silent = false } = {}) {
 
 function applyTimetable(item, destination = "dash") {
   if (!item?.state) throw new Error("This cloud record does not contain timetable data.");
-  window.S = normalizeState(item.state);
-  window.DIRTY = false;
+  const normalized = normalizeState(item.state);
+  const upgraded = JSON.stringify(normalized) !== JSON.stringify(item.state);
+  window.S = normalized;
+  window.DIRTY = upgraded;
   activeId = item.id;
   activeName = item.name || timetableName();
   pendingFingerprint = JSON.stringify(window.S);
-  pendingSince = 0;
+  pendingSince = upgraded ? Date.now() : 0;
   if (typeof window.applyTheme === "function") window.applyTheme(window.S.meta?.theme || "classic");
   window.VIEW = destination;
   window.drawNav();
@@ -293,6 +295,7 @@ async function newTimetableFromSetup() {
   next.cover = {};
   next.coverExcluded = {};
   next.plan = {};
+  next.planCatalogVersion = 2;
   next.classes.forEach((schoolClass) => { next.plan[schoolClass.id] = []; });
   next.meta.wef = "";
   const name = `${next.meta.school || "School"} — New timetable ${new Date().toLocaleDateString()}`;
