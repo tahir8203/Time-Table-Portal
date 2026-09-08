@@ -8,6 +8,8 @@ Teachers, classes and subjects use one synchronized catalogue. Newly added entri
 
 Teachers and classes each have a saved custom priority order. Drag either roster to rearrange it; Firebase preserves the order and the same sequence is used throughout Auto-build, timetable views, exports and PDFs.
 
+PDF Preview and Download use the same server-rendered, verified A4 file. When timetable data has not changed, the portal reuses the exact previewed PDF for download.
+
 When an older saved timetable has class lessons but a missing or empty Auto-build plan, the portal restores that class plan once from the current class timetable. An individual **Load from class timetable** button is also shown beside any empty class plan, avoiding changes to other classes.
 
 Failed Auto-build attempts include an actionable diagnostic report: exact plan errors, the deepest blocked class and period, rejected lessons and rules, teacher demand/capacity pressure, and suggested corrections.

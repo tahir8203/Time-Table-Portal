@@ -147,6 +147,9 @@ td.num,th.num{text-align:center}
 .teacher-order-row.drop-before td{box-shadow:inset 0 3px 0 var(--focus)}
 .teacher-order-row.drop-after td{box-shadow:inset 0 -3px 0 var(--focus)}
 .drag-priority{white-space:nowrap;text-align:center;font-weight:800}
+.pdf-preview-shell{background:#e5e7eb;border:1px solid var(--rule);padding:10px}
+.pdf-preview-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px;padding:9px 11px;background:#fff;border:1px solid var(--rule)}
+.pdf-preview-frame{display:block;width:100%;height:min(78vh,920px);min-height:620px;border:1px solid #111;background:#fff}
 .drag-handle{display:inline-flex;align-items:center;justify-content:center;min-width:26px;margin-right:7px;
   padding:3px 6px;border:1px solid var(--rule);border-radius:var(--r);background:var(--paper);color:var(--text-soft);
   cursor:grab;font-size:15px;line-height:1;vertical-align:middle;user-select:none}
@@ -2085,10 +2088,7 @@ function vPrint(){
 }
 function bindPrint(){
   bindAll('[data-pm]', function(el){ doPrint(el.dataset.pm); });
-  bindAll('[data-pv]', function(el){
-    $('pvBox').innerHTML='<div style="background:#fff;border:1px solid var(--rule);padding:10px;overflow:auto">'+
-      buildPrint(el.dataset.pv)+'</div>';
-  });
+  bindAll('[data-pv]', function(el){ previewPdf(el.dataset.pv); });
   $('exClass').onclick=exportClassCsv; $('exTeach').onclick=exportTeacherCsv;
   $('exList').onclick=exportListCsv;
   $('exCover').onclick=exportCoverCsv;
@@ -2096,35 +2096,87 @@ function bindPrint(){
 var PDF_NAMES={gate:'gate-time-division.pdf',cmaster:'class-wise-all-classes.pdf',tmaster:'teacher-wise-all-teachers.pdf',
   ccards:'class-timetables.pdf',tcards:'teacher-timetables.pdf',all:'complete-timetable-book.pdf',
   coverday:'alternative-period-order.pdf',covermonth:'alternative-period-statement.pdf'};
-async function doPrint(mode){
-  var buttons=[].slice.call(document.querySelectorAll('[data-pm]'));
-  buttons.forEach(function(button){ button.disabled=true; });
-  var active=document.querySelector('[data-pm="'+mode+'"]'), old=active&&active.textContent;
-  if(active) active.textContent='Building PDF…';
-  try{
+var PDF_CACHE={};
+function pdfModeLabel(mode){
+  var item=PMODES.filter(function(m){return m[0]===mode;})[0];
+  return item?item[1]:'Timetable PDF';
+}
+async function getVerifiedPdf(mode){
+  var html=buildPrint(mode), existing=PDF_CACHE[mode];
+  if(existing&&existing.html===html){
+    if(existing.promise) return existing.promise;
+    return existing;
+  }
+  if(existing&&existing.url) URL.revokeObjectURL(existing.url);
+  var pending={html:html,promise:null};
+  pending.promise=(async function(){
     if(!window.CloudPortal||!window.CloudPortal.getIdToken) throw new Error('Please sign in before generating a PDF.');
     var token=await window.CloudPortal.getIdToken();
     var response=await fetch('/api/pdf',{method:'POST',headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'},
-      body:JSON.stringify({mode:mode,html:buildPrint(mode)})});
+      body:JSON.stringify({mode:mode,html:html})});
     if(!response.ok){
       var problem=await response.json().catch(function(){return {};});
       throw new Error(problem.error||'The PDF service could not build this file.');
     }
-    var blob=await response.blob(), url=URL.createObjectURL(blob), link=document.createElement('a');
-    link.href=url; link.download=PDF_NAMES[mode]||'timetable.pdf'; document.body.appendChild(link); link.click();
-    setTimeout(function(){document.body.removeChild(link);URL.revokeObjectURL(url);},800);
-    console.info('Verified timetable PDF',{mode:mode,pages:response.headers.get('X-PDF-Pages'),
-      minimumHeightFill:response.headers.get('X-PDF-Min-Height-Fill'),minimumFontPt:response.headers.get('X-PDF-Min-Font-PT')});
-    toast('Verified A4 PDF downloaded');
-  }catch(error){
-    console.error(error);
-    openDlg('PDF generation problem','<div class="banner bad" style="margin:0">'+esc(error.message||'PDF generation failed.')+'</div>',
-      '<button class="btn pri" onclick="closeDlg()">Close</button>');
-  }finally{
-    buttons.forEach(function(button){ button.disabled=false; });
-    if(active) active.textContent=old;
+    var blob=await response.blob();
+    var ready={html:html,blob:blob,url:URL.createObjectURL(blob),
+      pages:response.headers.get('X-PDF-Pages')||'',
+      minimumHeightFill:response.headers.get('X-PDF-Min-Height-Fill')||'',
+      minimumFontPt:response.headers.get('X-PDF-Min-Font-PT')||''};
+    PDF_CACHE[mode]=ready;
+    return ready;
+  })();
+  PDF_CACHE[mode]=pending;
+  try{ return await pending.promise; }
+  catch(error){ if(PDF_CACHE[mode]===pending) delete PDF_CACHE[mode]; throw error; }
+}
+function setPdfButtonsBusy(mode,kind,busy){
+  var buttons=[].slice.call(document.querySelectorAll('[data-pm],[data-pv]'));
+  buttons.forEach(function(button){ button.disabled=busy; });
+  var selector=kind==='preview'?'[data-pv="'+mode+'"]':'[data-pm="'+mode+'"]';
+  var active=document.querySelector(selector);
+  if(active){
+    if(busy){ active.dataset.oldText=active.textContent; active.textContent=kind==='preview'?'Building preview…':'Building PDF…'; }
+    else if(active.dataset.oldText){ active.textContent=active.dataset.oldText; delete active.dataset.oldText; }
   }
 }
+function showPdfError(error){
+  console.error(error);
+  openDlg('PDF generation problem','<div class="banner bad" style="margin:0">'+esc(error.message||'PDF generation failed.')+'</div>',
+    '<button class="btn pri" onclick="closeDlg()">Close</button>');
+}
+async function previewPdf(mode){
+  setPdfButtonsBusy(mode,'preview',true);
+  try{
+    var pdf=await getVerifiedPdf(mode), box=$('pvBox');
+    if(!box) return;
+    box.innerHTML='<div class="pdf-preview-shell" data-preview-mode="'+mode+'">'+
+      '<div class="pdf-preview-head"><b>'+esc(pdfModeLabel(mode))+'</b><span class="small muted">'+
+      (pdf.pages?esc(pdf.pages)+' PDF page'+(pdf.pages==='1'?'':'s')+' · ':'')+
+      'This is the exact verified PDF used by Download A4 PDF.</span></div>'+
+      '<iframe class="pdf-preview-frame" id="pdfPreviewFrame" title="'+esc(pdfModeLabel(mode))+' PDF preview"></iframe></div>';
+    $('pdfPreviewFrame').src=pdf.url+'#view=FitH';
+    box.scrollIntoView({behavior:'smooth',block:'start'});
+    toast('Verified PDF preview ready');
+  }catch(error){ showPdfError(error); }
+  finally{ setPdfButtonsBusy(mode,'preview',false); }
+}
+async function doPrint(mode){
+  setPdfButtonsBusy(mode,'download',true);
+  try{
+    var pdf=await getVerifiedPdf(mode), link=document.createElement('a');
+    link.href=pdf.url; link.download=PDF_NAMES[mode]||'timetable.pdf'; document.body.appendChild(link); link.click();
+    setTimeout(function(){document.body.removeChild(link);},800);
+    console.info('Verified timetable PDF',{mode:mode,pages:pdf.pages,
+      minimumHeightFill:pdf.minimumHeightFill,minimumFontPt:pdf.minimumFontPt});
+    toast('Verified A4 PDF downloaded');
+    return {url:pdf.url,fileName:link.download};
+  }catch(error){ showPdfError(error); }
+  finally{ setPdfButtonsBusy(mode,'download',false); }
+}
+window.addEventListener('beforeunload',function(){ Object.keys(PDF_CACHE).forEach(function(mode){
+  if(PDF_CACHE[mode]&&PDF_CACHE[mode].url) URL.revokeObjectURL(PDF_CACHE[mode].url);
+}); });
 function hdr(title,sub){
   return '<div class="ptitle">'+esc(title)+'</div><div class="psub">'+esc(sub)+'</div>';
 }

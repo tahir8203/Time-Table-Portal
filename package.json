@@ -14,7 +14,8 @@
     "qa:catalog": "node scripts/catalog-sync-qa.mjs",
     "qa:class-order": "node scripts/class-order-qa.mjs",
     "qa:cover": "node scripts/cover-qa.mjs",
-    "qa:pdf": "node scripts/pdf-qa.mjs"
+    "qa:pdf": "node scripts/pdf-qa.mjs",
+    "qa:pdf-preview": "node scripts/pdf-preview-qa.mjs"
   },
   "dependencies": {
     "@sparticuz/chromium": "149.0.0",
