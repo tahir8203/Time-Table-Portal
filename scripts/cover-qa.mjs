@@ -54,7 +54,8 @@ try {
     result.autoAssignedEligibleTeacher = assigned.placed === 1 && S.cover[iso]["c1|1"] === "t3";
     result.autoSkippedExcludedTeacher = !Object.values(S.cover[iso]).includes("t2");
     const printed = new DOMParser().parseFromString(pCoverDay(), "text/html").body.textContent;
-    result.printListsExclusion = printed.includes("Not available for extra cover: TWO");
+    result.printHidesExclusion = !printed.includes("Not available for extra cover")
+      && !printed.includes("Do not assign cover today") && !printed.includes("TWO");
     result.printListsAssignment = printed.includes("THREE");
 
     render();

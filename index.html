@@ -1941,14 +1941,12 @@ function showCv(r){
 
 /* ---------- printable forms ---------- */
 function pCoverDay(){
-  var iso=CDATE, away=leaveOf(iso), excluded=coverExcludedOf(iso), needs=coverNeeds(iso), day=coverOf(iso);
+  var iso=CDATE, away=leaveOf(iso), needs=coverNeeds(iso), day=coverOf(iso);
   var h='<div class="psheet pp"><div class="psub">ALTERNATIVE PERIOD ORDER</div>'+
     '<div class="pbig cover-title">'+esc(dayName(iso))+', '+esc(niceDate(iso))+'</div>'+
     '<div class="pinfo">'+esc(S.meta.school)+'   |   Headmaster '+esc(S.meta.head)+'</div>';
   h+='<div class="pinfo top-gap">'+
      'On leave today: '+(away.length? away.map(tname).map(esc).join(',   ') : 'nobody')+'</div>';
-  h+='<div class="pinfo">Not available for extra cover: '+
-     (excluded.length? excluded.map(tname).map(esc).join(',   ') : 'nobody')+'</div>';
   if(!needs.length){
     h+='<div class="psum">No periods need cover on this day.</div></div>';
     return h;
@@ -2509,7 +2507,7 @@ function vHelp(){
    'Tick who is absent, and the portal shares their periods among the teachers who are actually free. '+
    'For any chosen date, use <b>Do not assign cover today</b> to exclude a specific teacher from automatic and manual alternative periods. '+
    'It gives the next turn to whoever has done the fewest so far, then to whoever covered longest ago, so the load rotates. '+
-   'The exclusions save online with the timetable and appear on the printed daily order and monthly CSV.'+
+   'The exclusions save online with the timetable and appear in the monthly CSV. They are not shown on the printed daily order.'+
    '</div></div>'+
    '<div class="card"><h2>If something looks wrong</h2><div class="body"><ul class="tight">'+
    '<li><b>A cell is red</b> — a teacher is booked in two classes at once on at least one weekday. Click it and check the status beside each weekday.</li>'+ 
