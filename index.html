@@ -1751,7 +1751,7 @@ function autoAssign(iso, opts, redoAll){
 function vCover(){
   ensureCoverCredits(S);
   var away=leaveOf(CDATE), excluded=coverExcludedOf(CDATE), day=coverOf(CDATE), needs=coverNeeds(CDATE);
-  var run=coverCounts('month',CDATE);
+  var run=coverFairnessCounts('all',CDATE), coverYear=CDATE.slice(0,4);
   var h='<div class="phead"><div><h1>Cover for leave</h1>'+
     '<div class="note">Mark who is absent, then let the portal share their periods among the teachers who are free — '+
     'giving the next turn to whoever has done the fewest so far. You can also exclude teachers who should not receive extra cover on the selected date.</div></div></div>';
@@ -1808,15 +1808,15 @@ function vCover(){
      ' <span class="hint">'+assigned+' of '+needs.length+' assigned</span>'+
      '<span class="spacer"></span><button class="btn sm" id="cvPrint">Print the day\u2019s form</button></h2><div class="tw"><table>'+
      '<thead><tr><th>Period</th><th>Time</th><th>Class</th><th>Subject</th><th>Teacher on leave</th>'+
-     '<th>Alternative teacher</th><th>Their cover this month</th></tr></thead><tbody>';
+     '<th>Alternative teacher</th><th title="Historical total, recorded cover after cutoff and weekday daily credits through the selected date">Year count '+coverYear+' (including credits)</th></tr></thead><tbody>';
   needs.forEach(function(n){
     var key=n.c+'|'+n.p, cur=day[key]||'';
     var cand=coverCandidates(CDATE,n.p,key);
     var opts='<option value="">— not covered —</option>'+cand.map(function(t){
       return '<option value="'+t.id+'"'+(t.id===cur?' selected':'')+'>'+esc(t.name)+
-             '  ('+(run[t.id]||0)+' this month)</option>'; }).join('');
+             '  ('+(run[t.id]||0)+' in '+coverYear+')</option>'; }).join('');
     if(cur && !cand.some(function(t){ return t.id===cur; }))
-      opts='<option value="'+cur+'" selected>'+esc(tname(cur))+
+      opts='<option value="'+cur+'" selected>'+esc(tname(cur))+' ('+(run[cur]||0)+' in '+coverYear+')'+
         (excluded.indexOf(cur)>=0?' (not available for cover today)':' (already busy)')+'</option>'+opts;
     h+='<tr><td><b>P'+n.p+'</b></td><td class="small muted">'+
        esc(isFriday(CDATE)?(S.timing.periods[n.p-1].fri||'—'):S.timing.periods[n.p-1].mt)+'</td>'+
