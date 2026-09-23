@@ -1806,7 +1806,8 @@ function vCover(){
   var assigned=0; needs.forEach(function(n){ if(day[n.c+'|'+n.p]) assigned++; });
   h+='<div class="card"><h2>Periods needing cover on '+niceDate(CDATE)+
      ' <span class="hint">'+assigned+' of '+needs.length+' assigned</span>'+
-     '<span class="spacer"></span><button class="btn sm" id="cvPrint">Print the day\u2019s form</button></h2><div class="tw"><table>'+
+     '<span class="spacer"></span><button class="btn sm" id="cvPrint">Print the day\u2019s form</button></h2>'+
+     '<div class="body" id="cvManualHelp">Manual selection lists every available teacher, regardless of yearly credits or the automatic daily cover limit. Credit priority applies only to automatic assignment. Teachers on leave, excluded for today, unavailable, or already teaching/covering this period are not available.</div><div class="tw"><table>'+
      '<thead><tr><th>Period</th><th>Time</th><th>Class</th><th>Subject</th><th>Teacher on leave</th>'+
      '<th>Alternative teacher</th><th title="Historical total, recorded cover after cutoff and weekday daily credits through the selected date">Year count '+coverYear+' (including credits)</th></tr></thead><tbody>';
   needs.forEach(function(n){
@@ -1822,13 +1823,14 @@ function vCover(){
        esc(isFriday(CDATE)?(S.timing.periods[n.p-1].fri||'—'):S.timing.periods[n.p-1].mt)+'</td>'+
        '<td><b>'+esc(cname(n.c))+'</b></td><td>'+esc(sname(n.s))+'</td>'+
        '<td class="small" style="color:var(--seal)">'+esc(tname(n.absent))+'</td>'+
-       '<td><select data-cv="'+key+'" data-p="'+n.p+'" style="min-width:210px">'+opts+'</select></td>'+
+       '<td><select data-cv="'+key+'" data-p="'+n.p+'" aria-label="Alternative teacher for '+esc(cname(n.c))+' period '+n.p+'" aria-describedby="cvManualHelp" style="min-width:210px">'+opts+'</select>'+
+       '<div class="small muted">'+cand.length+' available — all credit levels</div></td>'+
        '<td class="num">'+(cur?(run[cur]||0):'—')+'</td></tr>';
   });
   h+='</tbody></table></div>';
   if(needs.length && assigned<needs.length)
     h+='<div class="body"><div class="banner warn" style="margin:0">'+(needs.length-assigned)+
-       ' period(s) have nobody eligible. Review the unavailable list, merge the class with another, or raise the daily cover limit above.</div></div>';
+       ' period(s) are not assigned yet. Select any available teacher manually or use automatic assignment. If a list is empty, check leave, exclusions and existing lessons or cover in that period.</div></div>';
   h+='</div>';
 
   var td={}; Object.keys(day).forEach(function(k){ if(day[k]) td[day[k]]=(td[day[k]]||0)+1; });

@@ -46,7 +46,7 @@ function coverFairnessCounts(basis,iso){var m={};S.teachers.forEach(function(t){
 function coverCreditCard(){
   var c=ensureCoverCredits(S),year=CDATE.slice(0,4);
   var h='<div class="card"><h2>Cover credits &amp; history <span class="hint">'+year+' fairness score</span></h2><div class="body">'+
-    '<p>Lower scores receive the next available cover. Credits count toward fairness; they are not actual alternative periods. Daily credits apply Monday–Friday from the start date, except recorded leave. Adjust start dates to avoid including old holidays.</p>'+
+    '<p>Automatic assignment prioritises lower scores. Manual selection includes every available teacher regardless of score. Credits count toward fairness; they are not actual alternative periods. Daily credits apply Monday–Friday from the start date, except recorded leave. Adjust start dates to avoid including old holidays.</p>'+
     '<p>Historical totals replace actual cover counts up to the entered date for scoring only. Existing records are preserved. Enter actual extra periods only; daily credits are added separately. Saturdays and Sundays never receive daily credits. Choose the year using the Day date above.</p>'+
     '<button class="btn pri" id="creditEdit">Edit history and daily credits</button></div>'+
     '<div class="tw"><table><thead><tr><th>Teacher</th><th>Historical total</th><th>Actual after cutoff</th><th>Daily credits</th><th>Year score</th><th>Daily credit today</th></tr></thead><tbody>';

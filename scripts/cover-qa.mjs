@@ -66,6 +66,30 @@ try {
     const missed = autoAssign(iso, { basis: "month", maxDay: 2, sameClass: false }, true);
     result.allExcludedLeavesUncovered = missed.missed === 1 && !S.cover[iso]["c1|1"];
     result.dateSpecific = coverExcludedOf("2026-09-08").length === 0;
+    S.coverExcluded[iso] = [];
+    S.cover[iso] = {};
+    const credits = ensureCoverCredits(S);
+    credits.history['2026'] = {
+      t2: { amount: 0, through: '2026-09-06' },
+      t3: { amount: 100, through: '2026-09-06' },
+    };
+    credits.daily.t3 = { amount: 8, start: iso };
+    render();
+    const manual = document.querySelector('[data-cv]');
+    const choices = Array.from(manual.options);
+    result.manualIncludesAllCreditLevels = choices.some(o => o.value === 't2')
+      && choices.some(o => o.value === 't3' && o.textContent.includes('108 in 2026'));
+    result.manualExcludesAbsentTeacher = !choices.some(o => o.value === 't1');
+    manual.value = 't3';
+    manual.dispatchEvent(new Event('change', { bubbles: true }));
+    result.manualAcceptsHighCreditOverDailyLimit = S.cover[iso]['c1|1'] === 't3';
+    S.cover[iso] = {};
+    autoAssign(iso, { basis: 'all', maxDay: 2, sameClass: false }, true);
+    result.autoStillPrefersLowerCredit = S.cover[iso]['c1|1'] === 't2';
+    S.cover[iso] = {};
+    credits.daily.t3.amount = 0;
+    autoAssign(iso, { basis: 'all', maxDay: 2, sameClass: false }, true);
+    result.autoPrefersLowerYearCountWithEqualDailyLoad = S.cover[iso]['c1|1'] === 't2';
     return result;
   });
 
