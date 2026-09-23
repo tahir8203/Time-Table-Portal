@@ -11,13 +11,24 @@ try{
   r.noDoubleCount=coverCreditBreakdown(m.id,'all','2026-09-24').total===14;
   r.noFutureCount=coverCreditBreakdown(m.id,'all','2026-09-23').total===13;
   S.leave['2026-09-24']=[n.id];r.leaveSkipsDaily=dailyCoverCredit(n.id,'2026-09-24')===0;
-  r.weekendSkipsDaily=dailyCoverCredit(n.id,'2026-09-26')===0;
-  c.rewards['2026-08']={[m.id]:6};r.rewardIncluded=coverCreditBreakdown(m.id,'all','2026-09-24').total===20;
-  c.rewards['2026-09']={[m.id]:6};r.rewardNotEarly=coverCreditBreakdown(m.id,'all','2026-09-24').total===20;
-  r.rewardNextMonth=coverCreditBreakdown(m.id,'all','2026-10-01').total===26;
+  r.saturdaySkipsDaily=dailyCoverCredit(n.id,'2026-09-26')===0;
+  r.sundaySkipsDaily=dailyCoverCredit(n.id,'2026-09-27')===0;
+  const friday=coverCreditBreakdown(n.id,'all','2026-09-25').daily;
+  r.weekendTotalsUnchanged=coverCreditBreakdown(n.id,'all','2026-09-26').daily===friday&&coverCreditBreakdown(n.id,'all','2026-09-27').daily===friday;
+  r.mondayResumes=coverCreditBreakdown(n.id,'all','2026-09-28').daily===friday+1;
+  c.daily[n.id]={amount:3,start:'2026-01-01'};
+  let weekends=0,weekdays=0;
+  for(let date=new Date(2026,0,1,12);date.getFullYear()===2026;date.setDate(date.getDate()+1)){
+    const iso='2026-'+pad(date.getMonth()+1)+'-'+pad(date.getDate());
+    if([0,6].includes(date.getDay())){weekends++;if(dailyCoverCredit(n.id,iso)!==0)throw Error('Weekend credit on '+iso);}
+    else if(!leaveOf(iso).includes(n.id))weekdays++;
+  }
+  r.all104WeekendDaysExcluded=weekends===104;
+  r.manualCreditTotalsWeekdaysOnly=coverCreditBreakdown(n.id,'all','2026-12-31').daily===weekdays*3;
+  c.rewards={'2026-08':{[m.id]:6},'2026-09':{[m.id]:6}};
+  r.legacyRewardsIgnored=coverCreditBreakdown(m.id,'all','2026-10-01').total===14;
   r.yearIsolated=coverCreditBreakdown(m.id,'all','2027-01-01').total===0;
-  render();document.getElementById('rewardEdit').click();document.getElementById('rewardSave').click();
-  r.rewardReplacement=Object.keys(c.rewards['2026-08']).length===1;
+  render();r.rewardControlsRemoved=!document.getElementById('rewardEdit')&&!document.getElementById('pane').textContent.includes('Month-end attendance');
   r.rawRecordsUnchanged=S.cover['2026-09-22']['test|1']===m.id;
   return r;
  });console.log(results);if(Object.values(results).some(v=>!v))throw Error('Credit QA failed');

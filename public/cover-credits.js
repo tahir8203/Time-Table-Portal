@@ -1,8 +1,10 @@
 /* Fairness credits are separate from actual cover and leave records. */
 function creditToday(){var d=new Date();return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());}
 function ensureCoverCredits(st){
-  st.coverCredits=st.coverCredits||{history:{},daily:{},rewards:{},version:1};
-  var c=st.coverCredits;c.history=c.history||{};c.daily=c.daily||{};c.rewards=c.rewards||{};
+  st.coverCredits=st.coverCredits||{history:{},daily:{},version:2};
+  var c=st.coverCredits;c.history=c.history||{};c.daily=c.daily||{};
+  // Legacy reward records remain recoverable, but never contribute to scores.
+  c.version=2;
   if(!c.defaultsApplied){
     st.teachers.forEach(function(t){
       if(['MISS NURGUS','MISS SHAZIA','SIR MANZOOR'].indexOf(t.name.trim().replace(/\s+/g,' ').toUpperCase())>=0&&!c.daily[t.id])
@@ -24,7 +26,7 @@ function dailyCoverCredit(tid,iso){
 }
 function coverCreditBreakdown(tid,basis,iso){
   var c=ensureCoverCredits(S), year=iso.slice(0,4), start=basis==='month'?iso.slice(0,7)+'-01':year+'-01-01';
-  var h=(c.history[year]||{})[tid], out={actual:0,history:0,daily:0,rewards:0,total:0};
+  var h=(c.history[year]||{})[tid], out={actual:0,history:0,daily:0,total:0};
   var cutoff=h&&h.through<=iso&&h.through>=start?h.through:'';
   if(cutoff)out.history=h.amount;
   Object.keys(S.cover||{}).forEach(function(d){
@@ -38,22 +40,17 @@ function coverCreditBreakdown(tid,basis,iso){
     out.daily+=dailyCoverCredit(tid,d);
     cursor.setDate(cursor.getDate()+1);
   }
-  Object.keys(c.rewards).forEach(function(month){
-    var next=new Date(+month.slice(0,4),+month.slice(5,7),1,12);
-    var effective=next.getFullYear()+'-'+pad(next.getMonth()+1)+'-01';
-    if(effective.slice(0,4)===year&&effective<=iso&&(basis!=='month'||effective.slice(0,7)===iso.slice(0,7)))out.rewards+=(c.rewards[month][tid]||0);
-  });
-  out.total=out.actual+out.history+out.daily+out.rewards;return out;
+  out.total=out.actual+out.history+out.daily;return out;
 }
 function coverFairnessCounts(basis,iso){var m={};S.teachers.forEach(function(t){m[t.id]=coverCreditBreakdown(t.id,basis,iso).total;});return m;}
 function coverCreditCard(){
   var c=ensureCoverCredits(S),year=CDATE.slice(0,4);
   var h='<div class="card"><h2>Cover credits &amp; history <span class="hint">'+year+' fairness score</span></h2><div class="body">'+
     '<p>Lower scores receive the next available cover. Credits count toward fairness; they are not actual alternative periods. Daily credits apply Monday–Friday from the start date, except recorded leave. Adjust start dates to avoid including old holidays.</p>'+
-    '<p>Historical totals replace actual cover counts up to the entered date for scoring only. Existing records are preserved. Enter actual extra periods only; daily credits and rewards are added separately. Choose the year using the Day date above.</p>'+
-    '<button class="btn pri" id="creditEdit">Edit history and daily credits</button> <button class="btn" id="rewardEdit">Month-end attendance reward (+6)</button></div>'+
-    '<div class="tw"><table><thead><tr><th>Teacher</th><th>Historical total</th><th>Actual after cutoff</th><th>Daily credits</th><th>Rewards</th><th>Year score</th><th>Daily credit today</th></tr></thead><tbody>';
-  S.teachers.forEach(function(t){var b=coverCreditBreakdown(t.id,'all',CDATE);h+='<tr><td>'+esc(t.name)+'</td>'+[b.history,b.actual,b.daily,b.rewards,b.total,dailyCoverCredit(t.id,CDATE)].map(function(v){return '<td class="num">'+v+'</td>';}).join('')+'</tr>';});
+    '<p>Historical totals replace actual cover counts up to the entered date for scoring only. Existing records are preserved. Enter actual extra periods only; daily credits are added separately. Saturdays and Sundays never receive daily credits. Choose the year using the Day date above.</p>'+
+    '<button class="btn pri" id="creditEdit">Edit history and daily credits</button></div>'+
+    '<div class="tw"><table><thead><tr><th>Teacher</th><th>Historical total</th><th>Actual after cutoff</th><th>Daily credits</th><th>Year score</th><th>Daily credit today</th></tr></thead><tbody>';
+  S.teachers.forEach(function(t){var b=coverCreditBreakdown(t.id,'all',CDATE);h+='<tr><td>'+esc(t.name)+'</td>'+[b.history,b.actual,b.daily,b.total,dailyCoverCredit(t.id,CDATE)].map(function(v){return '<td class="num">'+v+'</td>';}).join('')+'</tr>';});
   return h+'</tbody></table></div></div>';
 }
 function bindCoverCredits(){
@@ -70,13 +67,5 @@ function bindCoverCredits(){
       c.history[year]=c.history[year]||{};edits.forEach(function(e){if(e.amount||c.history[year][e.id])c.history[year][e.id]={amount:e.amount,through:e.through};c.daily[e.id]={amount:e.daily,start:e.start};});
       DIRTY=true;closeDlg();render();toast('Cover credits updated');
     };
-  };
-  $('rewardEdit').onclick=function(){
-    var month=CMONTH,now=creditToday();
-    if(month>=now.slice(0,7)){toast('Choose a completed month in Cover record before awarding attendance credits.');return;}
-    var c=ensureCoverCredits(S),saved=c.rewards[month]||{},h='<p>'+esc(niceMonth(month))+': confirm attendance against your register. No recorded leave alone does not prove full attendance. Each selected teacher gets +6 once, effective next month. Uncheck to remove a reward.</p><div class="pill">';
-    S.teachers.forEach(function(t){var absent=Object.keys(S.leave||{}).some(function(d){return d.slice(0,7)===month&&leaveOf(d).indexOf(t.id)>=0;});h+='<label><input class="creditReward" type="checkbox" value="'+t.id+'"'+(saved[t.id]?' checked':'')+(absent?' disabled':'')+'> '+esc(t.name)+(absent?' (recorded leave)':'')+'</label>';});
-    openDlg('Month-end attendance reward',h+'</div>','<button class="btn" onclick="closeDlg()">Cancel</button><button class="btn pri" id="rewardSave">Confirm attendance and save</button>');
-    $('rewardSave').onclick=function(){var rewards={};document.querySelectorAll('.creditReward:checked:not(:disabled)').forEach(function(el){rewards[el.value]=6;});c.rewards[month]=rewards;DIRTY=true;closeDlg();render();toast('Monthly attendance rewards saved');};
   };
 }
