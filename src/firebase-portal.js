@@ -69,6 +69,7 @@ function normalizeState(value) {
   if (typeof window.ensureCatalogSync === "function") window.ensureCatalogSync(state);
   if (typeof window.ensureTeacherOrder === "function") window.ensureTeacherOrder(state);
   if (typeof window.ensureClassOrder === "function") window.ensureClassOrder(state);
+  if (typeof window.ensureCoverCredits === "function") window.ensureCoverCredits(state);
   return state;
 }
 
@@ -114,7 +115,7 @@ function parentRecord(name, state, includeCreated, versionCount) {
     effectiveFrom: state.meta?.wef || "",
     state,
     ownerUid: user.uid,
-    schemaVersion: 10,
+    schemaVersion: 11,
     versionCount,
     updatedAt: serverTimestamp(),
   };

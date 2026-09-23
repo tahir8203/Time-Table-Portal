@@ -2,6 +2,8 @@
 
 A browser-based school timetable portal with class/teacher views, weekday-specific lesson splits, auto-build, leave cover, strong black-and-white printing, and a private Firebase library for multiple timetables with online version history.
 
+Cover fairness uses editable yearly historical totals with a cutoff date, daily workload credits, and confirmed +6 monthly attendance rewards. Actual cover/leave records remain separate. The default balancing period is the selected year; historical totals replace recorded covers through their cutoff in the score only. Daily credits start on their configured date and exclude weekends and recorded leave. Rewards apply from the following month and are replaceable, never duplicated. Credits are stored with Firebase timetable states and versions.
+
 Daily cover exclusions let you mark teachers who must not receive alternative periods on a chosen date. These exclusions are retained in Firebase versions and included in the monthly cover CSV, but hidden from the daily printed order and its PDF preview.
 
 Teachers, classes and subjects use one synchronized catalogue. Newly added entries immediately appear in Auto-build, class-wise and teacher-wise screens, cover tools, exports and printable timetables, and the synchronized data is stored in Firebase versions.

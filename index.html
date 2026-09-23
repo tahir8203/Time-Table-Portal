@@ -1710,8 +1710,9 @@ function coverCandidates(iso,p,skipKey){
 function pickFair(iso,p,key,opts){
   var cand=coverCandidates(iso,p,key);
   if(!cand.length) return null;
-  var run=coverCounts(opts.basis,iso), day=coverOf(iso), an=analyse(dayCode(iso)||'mon');
+  var run=coverFairnessCounts(opts.basis,iso), day=coverOf(iso), an=analyse(dayCode(iso)||'mon');
   var today={}; Object.keys(day).forEach(function(k){ if(day[k]) today[day[k]]=(today[day[k]]||0)+1; });
+  cand.forEach(function(t){ today[t.id]=(today[t.id]||0)+dailyCoverCredit(t.id,iso); });
   var pool=cand.filter(function(t){ return (today[t.id]||0) < opts.maxDay; });
   var relaxed=false;
   if(!pool.length){ pool=cand; relaxed=true; }
@@ -1748,6 +1749,7 @@ function autoAssign(iso, opts, redoAll){
 
 /* ---------- view ---------- */
 function vCover(){
+  ensureCoverCredits(S);
   var away=leaveOf(CDATE), excluded=coverExcludedOf(CDATE), day=coverOf(CDATE), needs=coverNeeds(CDATE);
   var run=coverCounts('month',CDATE);
   var h='<div class="phead"><div><h1>Cover for leave</h1>'+
@@ -1784,12 +1786,12 @@ function vCover(){
   if(!away.length){
     h+='<div class="banner ok">Nobody is marked absent on '+niceDate(CDATE)+
        '. Tick a teacher above to work out their cover.</div>';
-    return h+coverStatsCard();
+    return h+coverCreditCard()+coverStatsCard();
   }
 
   h+='<div class="card"><h2>Rules for sharing the load</h2><div class="body rowflex">'+
      '<label class="fld">Balance over<select id="cvBasis">'+
-     '<option value="month">this month</option><option value="all">the whole year</option></select></label>'+
+     '<option value="all">selected year, including credits</option><option value="month">this month, including credits</option></select></label>'+
      '<label class="fld">Most cover periods one teacher may take today'+
      '<input type="number" id="cvMax" min="1" max="8" value="2"></label>'+
      '<div class="pill" style="align-self:end"><label><input type="checkbox" id="cvSame"> '+
@@ -1838,7 +1840,7 @@ function vCover(){
     });
     h+='</div></div>';
   }
-  return h+coverStatsCard();
+  return h+coverCreditCard()+coverStatsCard();
 }
 function coverStatsCard(){
   var run=coverCounts('month',CMONTH), all=coverCounts('all');
@@ -1846,6 +1848,7 @@ function coverStatsCard(){
   var spread=vals.length? Math.max.apply(null,vals)-Math.min.apply(null,vals) : 0;
   var tot=vals.reduce(function(a,b){ return a+b; },0);
   var months={}; Object.keys(S.cover||{}).forEach(function(d){ months[d.slice(0,7)]=1; });
+  for(var creditMonth=1;creditMonth<=12;creditMonth++)months[CDATE.slice(0,4)+'-'+pad(creditMonth)]=1;
   months[CMONTH]=1;
   var mo=Object.keys(months).sort();
   var h='<div class="card"><h2>Cover record <span class="hint">who has taken how many extra periods</span>'+
@@ -1879,6 +1882,7 @@ function coverStatsCard(){
   return h;
 }
 function bindCover(){
+  bindCoverCredits();
   $('cvDate').onchange=function(){ CDATE=this.value||CDATE; CMONTH=CDATE.slice(0,7); render(); };
   $('cvToday').onclick=function(){ var d=new Date();
     CDATE=d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate()); CMONTH=CDATE.slice(0,7); render(); };
@@ -1909,7 +1913,7 @@ function bindCover(){
     delete S.coverExcluded[CDATE];
     DIRTY=true; render(); toast('Every available teacher may now receive cover');
   };
-  function opts(){ return { basis:$('cvBasis')?$('cvBasis').value:'month',
+  function opts(){ return { basis:$('cvBasis')?$('cvBasis').value:'all',
     maxDay:$('cvMax')?(+$('cvMax').value||2):2, sameClass:$('cvSame')?$('cvSame').checked:false }; }
   if($('cvAuto')) $('cvAuto').onclick=function(){ var r=autoAssign(CDATE,opts(),false); render(); showCv(r); };
   if($('cvRedo')) $('cvRedo').onclick=function(){ var r=autoAssign(CDATE,opts(),true); render(); showCv(r); };
@@ -2562,6 +2566,7 @@ function render(){
 })();
 </script>
 
+<script src="/cover-credits.js"></script>
 <script type="module" src="/src/firebase-portal.js"></script>
 
 
