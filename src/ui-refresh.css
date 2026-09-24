@@ -34,3 +34,38 @@ html[data-theme="light"] .railfoot button:hover{background:#ffffff20}
   .pane{padding:24px 16px 48px;max-width:100%}.phead{padding-bottom:16px}.phead .note{font-size:13px}.card>h2,.card .body{padding:16px}.stats{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.stat{padding:15px}.stat .v{font-size:28px}.card .tw table{min-width:620px}.card .tw .grid{min-width:1200px}.bar{gap:8px}.bar>.spacer{display:none}.bar>.small{flex-basis:100%}.btn,.btn.sm{min-height:44px}.seg button{min-height:40px;padding:8px 11px}.teacher-order-note{padding:14px 16px}.rowflex>*{max-width:100%}.rowflex>.fld{flex:1 1 200px}.scrim{padding:10px}.dlg .body{padding:18px}.dlg h3{padding:18px}.dlg .foot{padding:14px}.dayedit{display:block;overflow-x:auto}.pdf-preview-frame{min-height:460px;height:70vh}select,input[type=text],input[type=number],input[type=date],textarea{font-size:16px}.cloudhero{padding:0}.cloudhero h2{font-size:21px}
 }
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{transition:none!important;scroll-behavior:auto!important}}
+
+/* Compact timetable workspace. This stylesheet is screen-only, not PDF CSS. */
+.screen-tools{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:12px;height:50px;padding:5px 16px;background:var(--paper);border-bottom:1px solid var(--rule);box-shadow:0 2px 12px #19274608}
+.screen-tools .btn{min-height:36px;padding:6px 12px;white-space:nowrap}.screen-brand{font-size:13px;font-weight:750;color:var(--text-soft)}
+.screen-tools [hidden],.rail[hidden]{display:none!important}.screen-tools #fitStatus{font-size:11px}
+.shell{min-height:calc(100dvh - 50px)}.rail{top:50px;height:calc(100dvh - 50px)}
+body.menu-hidden .shell{grid-template-columns:minmax(0,1fr)}
+.pane.timetable-fit{--tt-font:12px;padding:10px 12px 12px;max-width:none}
+.timetable-fit .phead{padding:0;margin:0 0 6px}.timetable-fit .phead h1{font-size:20px;line-height:1.2;letter-spacing:-.02em}.timetable-fit .phead .note{font-size:11px;line-height:1.35;margin-top:3px;max-width:none}
+.timetable-fit .bar{margin:5px 0 8px;gap:7px}.timetable-fit .bar .btn,.timetable-fit .seg button{font-size:11px;min-height:30px;padding:5px 9px}.timetable-fit .bar .small{font-size:10px}.timetable-fit .seg{padding:2px}.timetable-fit .card{margin-bottom:0;border-radius:10px}.timetable-fit .card>.tw{border-radius:9px}
+.pane.timetable-fit table.grid{table-layout:fixed;min-width:0;width:100%;font-size:var(--tt-font);line-height:1.1}
+.pane.timetable-fit .grid td,.pane.timetable-fit .grid th{font-size:1em;padding:.22em .3em;min-width:0;height:auto;white-space:normal;overflow-wrap:anywhere}
+.pane.timetable-fit .grid thead th{position:static;font-size:.92em;letter-spacing:0;font-weight:700;line-height:1.15}
+.pane.timetable-fit .grid thead th.t2{font-size:.86em;font-weight:500}
+.pane.timetable-fit .grid th:first-child{width:5%}.pane.timetable-fit .grid th:nth-child(2){width:10%}
+.pane.timetable-fit[data-view="tw"] .grid th:first-child{width:13%}.pane.timetable-fit[data-view="tw"] .grid th:nth-child(2){width:6%}
+.pane.timetable-fit[data-view="tw"] .grid th:last-child{width:10%}.pane.timetable-fit[data-view="tw"] .grid th:nth-last-child(2){width:4%}
+.pane.timetable-fit .grid th.brkh{width:2%}
+.pane.timetable-fit .grid td.cls{position:static;font-size:1em;box-shadow:none}
+.pane.timetable-fit .grid td.slot .s{font-size:1em;line-height:1.08;font-weight:750}
+.pane.timetable-fit .grid td.slot .t{font-size:.94em;line-height:1.08;margin-top:.1em;color:var(--text-soft)}
+.pane.timetable-fit .grid .small{font-size:.85em;line-height:1.1}
+.pane.timetable-fit .grid td.slot .dayline{display:flex;justify-content:center;align-items:baseline;flex-wrap:wrap;gap:0 .3em;padding:.06em 0;line-height:1.05}
+.pane.timetable-fit .grid td.slot .dayline .t{flex-basis:100%}
+.pane.timetable-fit .grid td.slot .daytag{display:block;font-size:.92em;line-height:1.05;letter-spacing:0}
+.pane.timetable-fit .grid td.slot .daytag::after{content:':' }
+.shared-teacher-label{display:none}
+.pane.timetable-fit .grid td.slot .split-stack{display:block}
+.pane.timetable-fit .grid td.slot .shared-teacher .t{display:none}
+.pane.timetable-fit .grid td.slot .shared-teacher-label{display:block;font-size:.94em;line-height:1.08;margin-top:.08em;color:var(--text-soft)}
+.pane.timetable-fit .grid td.slot.locked::after{width:4px;height:4px;top:2px;right:2px}
+@media(max-width:860px){
+  .rail{top:auto;height:auto}.screen-tools{padding:5px 10px;gap:8px}.screen-brand{display:none}.screen-tools #fitStatus{max-width:38vw;font-size:10px;line-height:1.2}
+  .pane.timetable-fit{padding:10px 8px}.timetable-fit .bar{flex-wrap:wrap}.timetable-fit .bar>.small{flex-basis:100%}
+}

@@ -233,7 +233,7 @@ ul.tight li{margin:2px 0}
 /* ---------- print: high-contrast black and white ---------- */
 #printRoot{display:none;color:#000;background:#fff}
 @media print{
-  .shell,.scrim,.toast{display:none!important}
+  .shell,.screen-tools,.scrim,.toast{display:none!important}
   #printRoot{display:block!important}
   html,body{background:#fff!important;color:#000!important}
   #printRoot .psheet *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
@@ -335,8 +335,15 @@ table.pcard tr.free td.mainv{color:#000;font-style:italic;font-weight:700;backgr
 </head>
 <body>
 <script id="stateData" type="application/json">null</script>
+<header class="screen-tools" id="screenTools">
+  <button class="btn sm" id="sidebarToggle" type="button" aria-label="Hide navigation" aria-controls="sideNav" aria-expanded="true">☰ <span>Hide menu</span></button>
+  <span class="screen-brand">Timetable Office</span>
+  <span class="spacer"></span>
+  <span id="fitStatus" class="small muted" role="status"></span>
+  <button class="btn sm" id="timetableFit" type="button" aria-pressed="false" hidden>Fit to screen</button>
+</header>
 <div class="shell">
-  <aside class="rail">
+  <aside class="rail" id="sideNav">
     <div class="crest">
       <div class="sch">GES 53/2-L Okara</div>
       <div class="sub">Timetable Office</div>
@@ -769,8 +776,10 @@ function classSlotHtml(cid,p){
   var groups=slotGroups(cid,p);
   if(!groups.length) return '';
   if(groups.length===1) return '<span class="s">'+esc(sname(groups[0].s))+'</span><span class="t">'+esc(tname(groups[0].t))+'</span>';
-  return groups.map(function(g){ return '<span class="dayline"><span class="daytag">'+esc(dayLabel(g.days))+'</span>'+ 
-    '<span class="s">'+esc(sname(g.s))+'</span><span class="t">'+esc(tname(g.t))+'</span></span>'; }).join('');
+  var shared=groups.every(function(g){return g.t===groups[0].t;});
+  return '<span class="split-stack'+(shared?' shared-teacher':'')+'">'+groups.map(function(g){ return '<span class="dayline"><span class="daytag">'+esc(dayLabel(g.days))+'</span>'+
+    '<span class="s">'+esc(sname(g.s))+'</span><span class="t">'+esc(tname(g.t))+'</span></span>'; }).join('')+'</span>'+
+    (shared?'<span class="shared-teacher-label">'+esc(tname(groups[0].t))+'</span>':'');
 }
 function periodHead(){
   var t=S.timing, h='', h2='';
@@ -2549,6 +2558,7 @@ function render(){
   if(VIEW==='cover') bindCover();
   if(VIEW==='cloud') bindCloud();
   if(VIEW==='print') bindPrint();
+  if(window.ScreenLayout) window.ScreenLayout.update();
 }
 (function(){
   var node=document.getElementById('stateData'), pre=null;
@@ -2569,6 +2579,7 @@ function render(){
 </script>
 
 <script src="/cover-credits.js"></script>
+<script src="/screen-layout.js"></script>
 <script type="module" src="/src/firebase-portal.js"></script>
 
 
