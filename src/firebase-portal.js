@@ -5,7 +5,7 @@ import {
 } from "firebase/auth";
 import {
   getFirestore, collection, doc, getDoc, getDocs, deleteDoc, query,
-  orderBy, limit, serverTimestamp, writeBatch, runTransaction,
+  orderBy, limit, serverTimestamp, writeBatch, runTransaction, onSnapshot,
 } from "firebase/firestore";
 
 const firebaseConfig = {
@@ -36,6 +36,79 @@ let busy = false;
 let errorMessage = "";
 let pendingFingerprint = "";
 let pendingSince = 0;
+let baseVersion = 0;
+let stopActive = null;
+let stopLibrary = null;
+let remoteUpdate = null;
+let syncConflict = false;
+
+function syncBanner() {
+  let banner = document.getElementById('liveSyncNotice');
+  if (!banner) {
+    banner = document.createElement('div');
+    banner.id = 'liveSyncNotice';
+    banner.className = 'banner warn';
+    banner.setAttribute('role', 'status');
+    banner.style.cssText = 'position:fixed;left:12px;right:12px;top:78px;z-index:90;max-width:700px;margin:auto;box-shadow:0 8px 30px #172e4a25';
+    document.body.appendChild(banner);
+  }
+  banner.hidden = !syncConflict; banner.style.display = syncConflict ? "block" : "none";
+  if (!syncConflict) return;
+  banner.innerHTML = '<b>A newer version was saved on another device.</b> Your edits are still here. Save them as a separate copy or open the latest cloud version.' +
+    '<div class="bar"><button class="btn" id="keepLocalCopy">Save my edits as a copy</button><button class="btn" id="loadRemoteVersion">Open latest version</button></div>';
+  banner.querySelector('#keepLocalCopy').onclick = async () => {
+    if (busy) return;
+    const state = currentState();
+    await perform(async () => {
+      const name = cleanName((activeName || timetableName()).slice(0,85) + ' — Local copy');
+      const id = await createCloudTimetable(name, state, 'Preserved conflicting edits');
+      applyTimetable({ id, name, state, versionCount: 1 }, window.VIEW);
+      await reloadLibrary();
+    });
+  };
+  banner.querySelector('#loadRemoteVersion').onclick = () => {
+    if (busy || !remoteUpdate || !window.confirm('Discard the unsaved edits on this device and open the latest cloud version?')) return;
+    window.closeDlg?.();
+    applyTimetable(remoteUpdate, window.VIEW);
+  };
+}
+
+function flushRemoteUpdate() {
+  if (!remoteUpdate || busy) return;
+  if (Number(remoteUpdate.versionCount || 1) <= baseVersion) { remoteUpdate = null; return; }
+  if (window.DIRTY) { syncConflict = true; syncBanner(); return; }
+  // Keep form fields stable until the user finishes an open editor.
+  if (document.getElementById('scrim')?.classList.contains('on') || /INPUT|SELECT|TEXTAREA/.test(document.activeElement?.tagName || '')) return;
+  const item = remoteUpdate;
+  applyTimetable(item, window.VIEW);
+  window.toast?.('Updated from cloud');
+}
+
+function watchActive() {
+  stopActive?.(); stopActive = null;
+  if (!activeId || !user) return;
+  const watchingId = activeId;
+  stopActive = onSnapshot(timetableRef(watchingId), snapshot => {
+    if (watchingId !== activeId || snapshot.metadata.hasPendingWrites) return;
+    if (!snapshot.exists()) {
+      stopActive?.(); stopActive = null; activeId = null; baseVersion = 0;
+      remoteUpdate = null; syncConflict = false; window.DIRTY = true; syncBanner();
+      errorMessage = 'This timetable was deleted on another device. Save as new to keep your local copy.';
+      render(); window.toast?.(errorMessage); return;
+    }
+    const item = { id: snapshot.id, ...snapshot.data() };
+    if (Number(item.versionCount || 1) > baseVersion) { remoteUpdate = item; flushRemoteUpdate(); }
+  }, error => { errorMessage = friendlyError(error); setBadge('Live sync unavailable', 'warn'); render(); });
+}
+
+function watchLibrary() {
+  stopLibrary?.();
+  stopLibrary = onSnapshot(query(docCollection(), orderBy('updatedAt', 'desc')), snapshot => {
+    timetables = snapshot.docs.map(item => ({ id: item.id, ...item.data() }));
+    if (!/INPUT|SELECT|TEXTAREA/.test(document.activeElement?.tagName || '')) render();
+  }, error => { errorMessage = friendlyError(error); render(); });
+}
+setInterval(flushRemoteUpdate, 600);
 
 function escapeHtml(value) {
   return String(value ?? "").replace(/[&<>"']/g, (char) => ({
@@ -147,14 +220,23 @@ async function createCloudTimetable(name, state, reason = "Created") {
 
 async function updateCloudTimetable(id, name, state, reason) {
   const parent = timetableRef(id);
-  await runTransaction(db, async (transaction) => {
+  const expectedVersion = id === activeId ? baseVersion : null;
+  const savedVersion = await runTransaction(db, async (transaction) => {
     const snapshot = await transaction.get(parent);
     if (!snapshot.exists()) throw new Error("That cloud timetable no longer exists.");
-    const nextVersion = Number(snapshot.data().versionCount || 1) + 1;
+    const currentVersion = Number(snapshot.data().versionCount || 1);
+    if (expectedVersion !== null && currentVersion !== expectedVersion) {
+      remoteUpdate = { id, ...snapshot.data() }; syncConflict = true; syncBanner();
+      throw new Error('Another device saved a newer version. Resolve the sync notice before saving.');
+    }
+    const nextVersion = currentVersion + 1;
     const version = doc(collection(parent, "versions"));
     transaction.update(parent, parentRecord(name, state, false, nextVersion));
     transaction.set(version, versionRecord(state, nextVersion, reason));
+    return nextVersion;
   });
+  if (id === activeId) baseVersion = savedVersion;
+  return savedVersion;
 }
 
 async function reloadLibrary() {
@@ -208,6 +290,9 @@ function applyTimetable(item, destination = "dash") {
   window.S = normalized;
   window.DIRTY = upgraded;
   activeId = item.id;
+  baseVersion = Number(item.versionCount || 1);
+  remoteUpdate = null; syncConflict = false; syncBanner();
+  watchActive();
   activeName = item.name || timetableName();
   pendingFingerprint = JSON.stringify(window.S);
   pendingSince = upgraded ? Date.now() : 0;
@@ -223,6 +308,7 @@ async function saveAsNew() {
   await perform(async () => {
     const state = currentState();
     activeId = await createCloudTimetable(name, state, "Created as a new timetable");
+    baseVersion = 1; remoteUpdate = null; syncConflict = false; syncBanner(); watchActive();
     activeName = name;
     window.DIRTY = false;
     pendingFingerprint = JSON.stringify(state);
@@ -231,21 +317,22 @@ async function saveAsNew() {
 }
 
 async function saveChanges(options = {}) {
-  if (!activeId) return false;
+  if (!activeId || syncConflict) return false;
   const input = document.getElementById("cloudName");
   const name = cleanName(input?.value || activeName || timetableName());
   const state = currentState();
   return perform(async () => {
     await updateCloudTimetable(activeId, name, state, options.automatic ? "Automatic save" : "Manual save");
     activeName = name;
-    window.DIRTY = false;
+    window.DIRTY = JSON.stringify(window.S) !== JSON.stringify(state);
     pendingFingerprint = JSON.stringify(state);
-    pendingSince = 0;
+    pendingSince = window.DIRTY ? Date.now() : 0;
     await reloadLibrary();
   }, { successMessage: "Saved online with a new version", silent: options.automatic });
 }
 
 async function openTimetable(id) {
+  if (window.DIRTY && !window.confirm("Discard unsaved edits and open this cloud timetable?")) return;
   await perform(async () => {
     const snapshot = await getDoc(timetableRef(id));
     if (!snapshot.exists()) throw new Error("That timetable no longer exists.");
@@ -324,8 +411,8 @@ async function restoreVersion(versionId) {
   if (!window.confirm(`Restore version ${selected.versionNumber}? The current state stays in history as an earlier version.`)) return;
   await perform(async () => {
     const restored = normalizeState(selected.state);
-    await updateCloudTimetable(parent.id, parent.name, restored, `Restored version ${selected.versionNumber}`);
-    applyTimetable({ id: parent.id, name: parent.name, state: restored });
+    const restoredVersion = await updateCloudTimetable(parent.id, parent.name, restored, `Restored version ${selected.versionNumber}`);
+    applyTimetable({ id: parent.id, name: parent.name, state: restored, versionCount: restoredVersion });
     await reloadLibrary();
   }, { successMessage: "Version restored and saved online" });
 }
@@ -336,6 +423,7 @@ async function bootstrapInitialTimetable() {
   const name = timetableName();
   activeId = await createCloudTimetable(name, state, "Initial timetable imported to Firebase");
   activeName = name;
+  baseVersion = 1; watchActive();
   window.DIRTY = false;
   pendingFingerprint = JSON.stringify(state);
   await reloadLibrary();
@@ -346,6 +434,7 @@ async function signIn() {
 }
 
 async function logOut() {
+  if (window.DIRTY && !window.confirm("Sign out with unsaved edits? Save your changes first to keep them.")) return;
   await perform(async () => {
     await signOut(auth);
     activeId = null;
@@ -469,7 +558,7 @@ window.CloudPortal = {
 };
 
 setInterval(() => {
-  if (!configured || !user || !activeId || busy || !window.DIRTY || !window.S) return;
+  if (!configured || !user || !activeId || busy || syncConflict || !window.DIRTY || !window.S) return;
   const fingerprint = JSON.stringify(window.S);
   if (fingerprint !== pendingFingerprint) {
     pendingFingerprint = fingerprint;
@@ -486,6 +575,9 @@ if (configured) {
   db = getFirestore(app, databaseId);
   setPersistence(auth, browserLocalPersistence).catch((error) => console.warn("Sign-in persistence unavailable", error));
   onAuthStateChanged(auth, async (nextUser) => {
+    stopActive?.(); stopActive = null; stopLibrary?.(); stopLibrary = null;
+    activeId = null; activeName = ""; baseVersion = 0; remoteUpdate = null; syncConflict = false;
+    syncBanner();
     user = nextUser;
     errorMessage = "";
     if (user) {
@@ -493,11 +585,13 @@ if (configured) {
         await reloadLibrary();
         if (timetables.length && !activeId) applyTimetable(timetables[0], "cloud");
         await bootstrapInitialTimetable();
+        watchLibrary();
       } catch (error) {
         errorMessage = friendlyError(error);
       }
     } else {
       timetables = [];
+      window.S = window.buildSeed(); window.DIRTY = false;
       forceCloudView();
     }
     render();
